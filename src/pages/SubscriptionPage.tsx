@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '@/store/AppContext';
-import { Check, Copy, Gift, Sparkles, Users, Zap, ShieldCheck, ExternalLink, Clock, ArrowRight } from 'lucide-react';
-import type { UserProfile } from '@/types';
+import { Check, Copy, Gift, Sparkles, Users, Zap, ExternalLink, Clock, ArrowRight } from 'lucide-react';
 
 export const SubscriptionPage: React.FC = () => {
   const { state, referral, applyReferralCode, setPlan } = useApp();
@@ -13,15 +12,7 @@ export const SubscriptionPage: React.FC = () => {
   const currentPlan = (state.user?.plan || 'free').toLowerCase();
   const KASPI_PAY_LINK = 'https://pay.kaspi.kz/pay/6hpgsuja';
 
-  const plans: Array<{
-    id: UserProfile['plan'];
-    name: string;
-    price: string;
-    period: string;
-    description: string;
-    features: string[];
-    popular?: boolean;
-  }> = [
+  const plans = [
     {
       id: 'free',
       name: 'Старт (Free)',
@@ -81,15 +72,13 @@ export const SubscriptionPage: React.FC = () => {
     }
   };
 
-  const handlePayClick = (planId: UserProfile['plan']) => {
+  const handlePayClick = (planId: string) => {
     if (planId === 'free') {
       setPlan('free');
       setPendingPlan(null);
       return;
     }
-    // Открываем Kaspi Pay
     window.open(KASPI_PAY_LINK, '_blank');
-    // Ставим статус "Ожидает подтверждения", но НЕ МЕНЯЕМ тариф!
     setPendingPlan(planId);
   };
 
@@ -104,7 +93,6 @@ export const SubscriptionPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Карточки Тарифов */}
       <div className="grid md:grid-cols-3 gap-6">
         {plans.map((p) => {
           const isCurrent = currentPlan === p.id;
@@ -186,7 +174,6 @@ export const SubscriptionPage: React.FC = () => {
         })}
       </div>
 
-      {/* Активация промокода */}
       <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-2xl p-6 shadow-xl space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-indigo-700/50 pb-6">
           <div className="space-y-1">
@@ -231,8 +218,8 @@ export const SubscriptionPage: React.FC = () => {
                 onClick={handleCopy}
                 className="bg-white text-indigo-900 font-semibold px-3 py-2 rounded-xl text-xs hover:bg-indigo-50 transition flex items-center gap-1 shrink-0"
               >
-                {copied ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Готово!' : 'Копия'}
+                <Copy className="w-3.5 h-3.5" />
+                {copied ? 'Скопировано!' : 'Копия'}
               </button>
             </div>
           </div>

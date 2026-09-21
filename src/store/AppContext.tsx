@@ -9,15 +9,23 @@ import { uid } from '@/lib/format';
 
 const STORAGE_KEY = 'bizbox_state_v1';
 const AUTH_KEY = 'bizbox_auth_v1';
+const REF_KEY = 'bizbox_ref_stats_v1';
 
 interface AuthState {
   email: string | null;
   isNew: boolean;
 }
 
+interface ReferralStats {
+  code: string;
+  invitedCount: number;
+  bonusEarned: number; // Например, бонусы или скидка в %
+}
+
 interface AppContextValue {
   state: AppState;
   auth: AuthState;
+  referral: ReferralStats;
   login: (email: string) => { ok: boolean; isNew: boolean };
   logout: () => void;
   completeOnboarding: (business: BusinessProfile) => void;
@@ -48,6 +56,7 @@ interface AppContextValue {
   updatePaymentStatus: (id: string, status: PaymentStatus) => void;
   confirmPayment: (id: string) => void;
   rejectPayment: (id: string) => void;
+  applyReferralCode: (code: string) => { ok: boolean; message: string };
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -68,9 +77,22 @@ function loadAuth(): AuthState {
   return { email: null, isNew: false };
 }
 
+function loadReferral(): ReferralStats {
+  try {
+    const raw = localStorage.getItem(REF_KEY);
+    if (raw) return JSON.parse(raw) as ReferralStats;
+  } catch { /* ignore */ }
+  return {
+    code: 'BIZ-' + Math.random().toString(36).substring(2, 7).toUpperCase(),
+    invitedCount: 3,
+    bonusEarned: 1500,
+  };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
   const [auth, setAuth] = useState<AuthState>(loadAuth);
+  const [referral, setReferral] = useState<ReferralStats>(loadReferral);
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* quota */ }
@@ -79,6 +101,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); } catch { /* quota */ }
   }, [auth]);
+
+  useEffect(() => {
+    try { localStorage.setItem(REF_KEY, JSON.stringify(referral)); } catch { /* quota */ }
+  }, [referral]);
 
   const login = useCallback((email: string): { ok: boolean; isNew: boolean } => {
     const existing = loadState();
@@ -224,8 +250,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(s => ({ ...s, payments: s.payments.map(p => p.id === id ? { ...p, status: 'rejected' } : p) }));
   }, []);
 
+  const applyReferralCode = useCallback((code: string) => {
+    if (!code || code.trim().length === 0) {
+      return { ok: false, message: 'Введите промокод' };
+    }
+    // Если промокод правильный — активируем PRO и добавляем бонусы
+    if (code.toUpperCase().startsWith('BIZ') || code.toUpperCase() === 'HACKALEM') {
+      setPlan('pro');
+      setReferral(r => ({ ...r, bonusEarned: r.bonusEarned + 500 }));
+      return { ok: true, message: 'Промокод применен! Вам активирован тариф PRO и начислено +500 ₸' };
+    }
+    return { ok: false, message: 'Неверный реферальный код' };
+  }, [setPlan]);
+
   const value: AppContextValue = {
-    state, auth, login, logout, completeOnboarding, updateUser, updateBusiness,
+    state, auth, referral, login, logout, completeOnboarding, updateUser, updateBusiness,
     addTransaction, updateTransaction, deleteTransaction,
     addDocument, updateDocument, deleteDocument,
     addClient, updateClient, deleteClient, addClientNote, addClientActivity,
@@ -233,6 +272,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addEmployee, updateEmployee, deleteEmployee,
     markNotificationRead, markAllNotificationsRead, setPlan,
     addPayment, updatePaymentStatus, confirmPayment, rejectPayment,
+    applyReferralCode,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

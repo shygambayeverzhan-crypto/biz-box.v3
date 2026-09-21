@@ -19,7 +19,7 @@ interface AuthState {
 interface ReferralStats {
   code: string;
   invitedCount: number;
-  bonusEarned: number; // Например, бонусы или скидка в %
+  bonusEarned: number;
 }
 
 interface AppContextValue {
@@ -66,7 +66,13 @@ function loadState(): AppState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw) as AppState;
   } catch { /* ignore */ }
-  return createSeedState();
+  
+  // Создаем дефолтное состояние и ПРИНУДИТЕЛЬНО ставим тариф 'free' для теста ограничений
+  const seed = createSeedState();
+  if (seed.user) {
+    seed.user.plan = 'free';
+  }
+  return seed;
 }
 
 function loadAuth(): AuthState {
@@ -114,6 +120,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isNewUser) {
       const name = email.split('@')[0];
       const fresh = createNewUserState(email, name.charAt(0).toUpperCase() + name.slice(1));
+      if (fresh.user) fresh.user.plan = 'free';
       setState(fresh);
       setAuth({ email, isNew: true });
       return { ok: true, isNew: true };
@@ -254,13 +261,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!code || code.trim().length === 0) {
       return { ok: false, message: 'Введите промокод' };
     }
-    // Если промокод правильный — активируем PRO и добавляем бонусы
-    if (code.toUpperCase().startsWith('BIZ') || code.toUpperCase() === 'HACKALEM') {
+    const cleanCode = code.trim().toUpperCase();
+    if (cleanCode.startsWith('BIZ') || cleanCode === 'HACKALEM') {
       setPlan('pro');
       setReferral(r => ({ ...r, bonusEarned: r.bonusEarned + 500 }));
-      return { ok: true, message: 'Промокод применен! Вам активирован тариф PRO и начислено +500 ₸' };
+      return { ok: true, message: 'Промокод применен! Тариф PRO активирован!' };
     }
-    return { ok: false, message: 'Неверный реферальный код' };
+    return { ok: false, message: 'Неверный промокод' };
   }, [setPlan]);
 
   const value: AppContextValue = {

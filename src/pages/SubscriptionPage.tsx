@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useApp } from '@/store/AppContext';
-import { Check, Copy, Gift, Sparkles, Users, Zap, ShieldCheck, ExternalLink } from 'lucide-react';
+import { Check, Copy, Gift, Sparkles, Users, Zap, ShieldCheck, ExternalLink, Clock, ArrowRight } from 'lucide-react';
 import type { UserProfile } from '@/types';
 
 export const SubscriptionPage: React.FC = () => {
-  const { state, setPlan, referral, applyReferralCode } = useApp();
+  const { state, referral, applyReferralCode, setPlan } = useApp();
   const [copied, setCopied] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<string | null>(null);
 
   const currentPlan = (state.user?.plan || 'free').toLowerCase();
   const KASPI_PAY_LINK = 'https://pay.kaspi.kz/pay/6hpgsuja';
@@ -74,31 +75,40 @@ export const SubscriptionPage: React.FC = () => {
     e.preventDefault();
     const res = applyReferralCode(inputCode);
     setMessage({ text: res.message, isError: !res.ok });
-    if (res.ok) setInputCode('');
+    if (res.ok) {
+      setInputCode('');
+      setPendingPlan(null);
+    }
   };
 
-  const handleSelectPlan = (planId: UserProfile['plan']) => {
-    if (planId !== 'free') {
-      window.open(KASPI_PAY_LINK, '_blank');
+  const handlePayClick = (planId: UserProfile['plan']) => {
+    if (planId === 'free') {
+      setPlan('free');
+      setPendingPlan(null);
+      return;
     }
-    setPlan(planId);
+    // Открываем Kaspi Pay
+    window.open(KASPI_PAY_LINK, '_blank');
+    // Ставим статус "Ожидает подтверждения", но НЕ МЕНЯЕМ тариф!
+    setPendingPlan(planId);
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-10">
-      <div className="text-center space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-          Управление подпиской и бонусами
+    <div className="max-w-6xl mx-auto p-4 space-y-8">
+      <div className="text-center space-y-2">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+          Управление подпиской
         </h1>
-        <p className="text-gray-500 max-w-2xl mx-auto">
-          Выберите тариф или активируйте промокод для доступа к премиум-функциям.
+        <p className="text-sm text-gray-500 max-w-xl mx-auto">
+          Оплатите через Kaspi Pay или введите промокод для активации тарифного плана.
         </p>
       </div>
 
-      {/* Тарифы */}
+      {/* Карточки Тарифов */}
       <div className="grid md:grid-cols-3 gap-6">
         {plans.map((p) => {
           const isCurrent = currentPlan === p.id;
+          const isPending = pendingPlan === p.id;
           const isPaid = p.id !== 'free';
 
           return (
@@ -118,15 +128,15 @@ export const SubscriptionPage: React.FC = () => {
 
               <div className="space-y-4">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white">{p.name}</h3>
-                <p className="text-sm text-gray-500">{p.description}</p>
+                <p className="text-xs text-gray-500">{p.description}</p>
                 <div className="flex items-baseline gap-1">
                   <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{p.price}</span>
-                  <span className="text-sm text-gray-500">/{p.period}</span>
+                  <span className="text-xs text-gray-500">/{p.period}</span>
                 </div>
 
-                <ul className="space-y-2.5 pt-4 border-t border-gray-100 dark:border-gray-700">
+                <ul className="space-y-2 pt-4 border-t border-gray-100 dark:border-gray-700">
                   {p.features.map((f, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                    <li key={idx} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
                       <Check className="w-4 h-4 text-emerald-500 shrink-0" />
                       <span>{f}</span>
                     </li>
@@ -134,100 +144,119 @@ export const SubscriptionPage: React.FC = () => {
                 </ul>
               </div>
 
-              <button
-                onClick={() => handleSelectPlan(p.id)}
-                disabled={isCurrent}
-                className={`w-full mt-6 py-2.5 px-4 rounded-xl font-semibold text-sm transition flex items-center justify-center gap-2 ${
-                  isCurrent
-                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-default'
-                    : isPaid
-                    ? 'bg-red-600 text-white hover:bg-red-700 shadow-md'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200'
-                }`}
-              >
-                {isCurrent ? (
-                  'Текущий тариф'
-                ) : isPaid ? (
-                  <>
-                    <span>Оплатить через Kaspi Pay</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </>
-                ) : (
-                  'Перейти на бесплатный'
+              <div className="mt-6 space-y-2">
+                <button
+                  onClick={() => handlePayClick(p.id)}
+                  disabled={isCurrent}
+                  className={`w-full py-2.5 px-4 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-2 ${
+                    isCurrent
+                      ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-default'
+                      : isPending
+                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                      : isPaid
+                      ? 'bg-red-600 text-white hover:bg-red-700 shadow-md'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                  }`}
+                >
+                  {isCurrent ? (
+                    'Текущий тариф'
+                  ) : isPending ? (
+                    <>
+                      <Clock className="w-4 h-4 animate-spin" />
+                      <span>Ожидание оплаты в Kaspi...</span>
+                    </>
+                  ) : isPaid ? (
+                    <>
+                      <span>Оплатить через Kaspi</span>
+                      <ExternalLink className="w-4 h-4" />
+                    </>
+                  ) : (
+                    'Перейти на Free'
+                  )}
+                </button>
+
+                {isPending && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
+                    Оплатите в Kaspi. Проверка занимает до 15 мин. Или введите промокод ниже.
+                  </p>
                 )}
-              </button>
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* Рефералка */}
-      <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-2xl p-8 shadow-xl space-y-6">
+      {/* Активация промокода */}
+      <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-2xl p-6 shadow-xl space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-indigo-700/50 pb-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-indigo-300 font-semibold text-sm">
-              <Gift className="w-5 h-5 text-amber-400" />
-              <span>Реферальная программа</span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs">
+              <Gift className="w-4 h-4 text-amber-400" />
+              <span>Мгновенная активация</span>
             </div>
-            <h2 className="text-2xl font-bold">Приглашайте друзей и получайте бонусы</h2>
+            <h2 className="text-xl font-bold">Активация по промокоду</h2>
+            <p className="text-indigo-200 text-xs max-w-xl">
+              Если у вас есть промокод от администратора или партнеров, введите его для моментального снятия ограничений.
+            </p>
           </div>
 
-          <div className="flex gap-4 bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/10 shrink-0">
-            <div className="text-center px-3">
-              <div className="flex items-center justify-center gap-1 text-xs text-indigo-200">
-                <Users className="w-3.5 h-3.5" /> Приглашено
+          <div className="flex gap-4 bg-white/10 backdrop-blur-md p-3 rounded-xl border border-white/10 shrink-0">
+            <div className="text-center px-2">
+              <div className="flex items-center justify-center gap-1 text-[11px] text-indigo-200">
+                <Users className="w-3 h-3" /> Рефералов
               </div>
-              <div className="text-xl font-extrabold mt-1">{referral.invitedCount} чел.</div>
+              <div className="text-base font-extrabold mt-0.5">{referral.invitedCount} чел.</div>
             </div>
             <div className="w-px bg-indigo-700/50" />
-            <div className="text-center px-3">
-              <div className="flex items-center justify-center gap-1 text-xs text-indigo-200">
-                <Zap className="w-3.5 h-3.5 text-amber-400" /> Бонусы
+            <div className="text-center px-2">
+              <div className="flex items-center justify-center gap-1 text-[11px] text-indigo-200">
+                <Zap className="w-3 h-3 text-amber-400" /> Бонусы
               </div>
-              <div className="text-xl font-extrabold mt-1 text-amber-400">{referral.bonusEarned} ₸</div>
+              <div className="text-base font-extrabold mt-0.5 text-amber-400">{referral.bonusEarned} ₸</div>
             </div>
           </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Ваша ссылка</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 readOnly
                 value={`${window.location.origin}?ref=${referral.code}`}
-                className="w-full bg-white/10 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none"
+                className="w-full bg-white/10 border border-indigo-500/30 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
               />
               <button
                 onClick={handleCopy}
-                className="bg-white text-indigo-900 font-semibold px-4 py-2 rounded-xl text-sm hover:bg-indigo-50 transition flex items-center gap-1.5 shrink-0"
+                className="bg-white text-indigo-900 font-semibold px-3 py-2 rounded-xl text-xs hover:bg-indigo-50 transition flex items-center gap-1 shrink-0"
               >
-                {copied ? <ShieldCheck className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                {copied ? 'Скопировано!' : 'Копировать'}
+                {copied ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Готово!' : 'Копия'}
               </button>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Промокод</label>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Ввести промокод</label>
             <form onSubmit={handleApplyCode} className="flex gap-2">
               <input
                 type="text"
-                placeholder="Введите HACKALEM"
+                placeholder="Например: HACKALEM"
                 value={inputCode}
                 onChange={(e) => setInputCode(e.target.value)}
-                className="w-full bg-white/10 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none"
+                className="w-full bg-white/10 border border-indigo-500/30 rounded-xl px-3 py-2 text-xs text-white focus:outline-none placeholder-indigo-300/50"
               />
               <button
                 type="submit"
-                className="bg-amber-400 text-slate-900 font-bold px-4 py-2 rounded-xl text-sm hover:bg-amber-300 transition shrink-0"
+                className="bg-amber-400 text-slate-900 font-bold px-4 py-2 rounded-xl text-xs hover:bg-amber-300 transition shrink-0 flex items-center gap-1"
               >
-                Применить
+                <span>Активировать</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>
             {message && (
-              <p className={`text-xs mt-1 ${message.isError ? 'text-rose-300' : 'text-emerald-300'}`}>
+              <p className={`text-xs mt-1 ${message.isError ? 'text-rose-300' : 'text-emerald-300 font-medium'}`}>
                 {message.text}
               </p>
             )}

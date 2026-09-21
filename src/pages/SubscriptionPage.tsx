@@ -9,8 +9,7 @@ export const SubscriptionPage: React.FC = () => {
   const [inputCode, setInputCode] = useState('');
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
-  const currentPlan = state.user?.plan || 'free';
-
+  const currentPlan = (state.user?.plan || 'free').toLowerCase();
   const KASPI_PAY_LINK = 'https://pay.kaspi.kz/pay/6hpgsuja';
 
   const plans: Array<{
@@ -27,12 +26,11 @@ export const SubscriptionPage: React.FC = () => {
       name: 'Старт (Free)',
       price: '0 ₸',
       period: 'навсегда',
-      description: 'Базовый функционал для ознакомления и небольших проектов',
+      description: 'Базовый функционал для ознакомления',
       features: [
         'Учет доходов и расходов',
         'До 10 клиентов в базе',
-        'Базовые шаблоны документов',
-        '1 пользователь',
+        'Задачи и календарь',
       ],
     },
     {
@@ -40,14 +38,13 @@ export const SubscriptionPage: React.FC = () => {
       name: 'Бизнес PRO',
       price: '9 900 ₸',
       period: 'в месяц',
-      description: 'Полный набор инструментов с AI-ассистентом для быстрого роста',
+      description: 'Полный набор инструментов с AI-аналитикой',
       popular: true,
       features: [
-        'Безлимитный финансовый учет',
-        'AI-аналитика и отчеты',
+        'Безлимитный учет и отчеты',
+        'Документы и договоры',
         'Маркетплейс специалистов',
-        'Автогенерация документов',
-        'До 5 сотрудников',
+        'Управление сотрудниками',
         'Приоритетная поддержка',
       ],
     },
@@ -56,13 +53,12 @@ export const SubscriptionPage: React.FC = () => {
       name: 'Корпорация',
       price: '29 900 ₸',
       period: 'в месяц',
-      description: 'Максимальные мощности и индивидуальные интеграции',
+      description: 'Максимальные мощности и интеграции',
       features: [
-        'Всё, что есть в PRO',
-        'Неограниченное число сотрудников',
-        'Выделенный AI-агент под бизнес',
-        'Персональный менеджер 24/7',
-        'API и пользовательские интеграции',
+        'Всё из тарифа PRO',
+        'Выделенный AI-агент',
+        'Персональный менеджер',
+        'API и Кастомные отчеты',
       ],
     },
   ];
@@ -83,26 +79,23 @@ export const SubscriptionPage: React.FC = () => {
 
   const handleSelectPlan = (planId: UserProfile['plan']) => {
     if (planId !== 'free') {
-      // Открываем Kaspi Pay в новой вкладке для проведения оплаты
       window.open(KASPI_PAY_LINK, '_blank');
     }
-    // Активируем выбранный план в приложении
     setPlan(planId);
   };
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-10">
-      {/* Заголовок */}
       <div className="text-center space-y-3">
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
           Управление подпиской и бонусами
         </h1>
         <p className="text-gray-500 max-w-2xl mx-auto">
-          Выберите подходящий тариф для вашего бизнеса или используйте реферальную программу, чтобы получать бонусы и бесплатный доступ.
+          Выберите тариф или активируйте промокод для доступа к премиум-функциям.
         </p>
       </div>
 
-      {/* Карточки Тарифов */}
+      {/* Тарифы */}
       <div className="grid md:grid-cols-3 gap-6">
         {plans.map((p) => {
           const isCurrent = currentPlan === p.id;
@@ -119,7 +112,7 @@ export const SubscriptionPage: React.FC = () => {
             >
               {p.popular && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-full flex items-center gap-1 shadow">
-                  <Sparkles className="w-3 h-3" /> Популярный выбор
+                  <Sparkles className="w-3 h-3" /> Популярный
                 </span>
               )}
 
@@ -168,21 +161,17 @@ export const SubscriptionPage: React.FC = () => {
         })}
       </div>
 
-      {/* Реферальная программа */}
+      {/* Рефералка */}
       <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-2xl p-8 shadow-xl space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-indigo-700/50 pb-6">
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-indigo-300 font-semibold text-sm">
               <Gift className="w-5 h-5 text-amber-400" />
-              <span>Реферальная программа BIZBOX</span>
+              <span>Реферальная программа</span>
             </div>
             <h2 className="text-2xl font-bold">Приглашайте друзей и получайте бонусы</h2>
-            <p className="text-indigo-200 text-sm max-w-xl">
-              Поделитесь ссылкой с коллегами. За каждого зарегистрированного пользователя вы получаете <strong>+500 ₸</strong> на бонусный баланс, а ваш друг — скидку на тариф PRO.
-            </p>
           </div>
 
-          {/* Статистика */}
           <div className="flex gap-4 bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/10 shrink-0">
             <div className="text-center px-3">
               <div className="flex items-center justify-center gap-1 text-xs text-indigo-200">
@@ -201,11 +190,8 @@ export const SubscriptionPage: React.FC = () => {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Моя ссылка */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">
-              Ваша реферальная ссылка
-            </label>
+            <label className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Ваша ссылка</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -223,18 +209,15 @@ export const SubscriptionPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Ввод промокода */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">
-              Есть промокод или код друга?
-            </label>
+            <label className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Промокод</label>
             <form onSubmit={handleApplyCode} className="flex gap-2">
               <input
                 type="text"
-                placeholder="Введите код (например: HACKALEM)"
+                placeholder="Введите HACKALEM"
                 value={inputCode}
                 onChange={(e) => setInputCode(e.target.value)}
-                className="w-full bg-white/10 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-sm text-white placeholder-indigo-300 focus:outline-none"
+                className="w-full bg-white/10 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none"
               />
               <button
                 type="submit"

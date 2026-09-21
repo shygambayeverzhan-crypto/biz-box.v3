@@ -1,306 +1,256 @@
-import { useState } from 'react';
-import { Check, Sparkles, Zap, Crown, ExternalLink, Copy, Clock, ArrowLeft, Send, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
 import { useApp } from '@/store/AppContext';
-import { useToast } from '@/store/ToastContext';
-import type { UserProfile, PaymentRequest } from '@/types';
-import { formatCurrency } from '@/lib/format';
-import { PageHeader } from '@/components/PageHeader';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { Modal } from '@/components/ui/Modal';
-import { Input, Field } from '@/components/ui/Input';
-import { cn } from '@/lib/cn';
+import { Check, Copy, Gift, Sparkles, Users, Zap, ShieldCheck, ExternalLink } from 'lucide-react';
+import type { UserProfile } from '@/types';
 
-const KASPI_PAY_URL = 'https://pay.kaspi.kz/pay/6hpgsuja';
-
-interface Plan {
-  id: UserProfile['plan'];
-  name: string;
-  price: number;
-  icon: typeof Check;
-  features: string[];
-  highlight?: boolean;
-  color: string;
-}
-
-const plans: Plan[] = [
-  {
-    id: 'free', name: 'FREE', price: 0, icon: Sparkles, color: 'text-white/60',
-    features: ['1 бизнес', 'Базовый учёт', '20 операций в месяц', '5 документов', 'Календарь', 'Базовый CRM'],
-  },
-  {
-    id: 'business', name: 'BUSINESS', price: 4990, icon: Zap, highlight: true, color: 'text-accent-400',
-    features: ['Всё из Free', 'Безлимитные операции', 'Документы без лимитов', 'Полноценный CRM', 'Сотрудники', 'Финансовая аналитика', 'Приоритетная поддержка'],
-  },
-  {
-    id: 'pro', name: 'PRO', price: 14990, icon: Crown, color: 'text-warning-400',
-    features: ['Всё из Business', 'Расширенная аналитика', 'Бизнес-специалисты', 'Автоматизация процессов', 'Приоритетные специалисты', 'Расширенные лимиты'],
-  },
-];
-
-const planPrices: Record<string, number> = { free: 0, business: 4990, pro: 14990 };
-const planNames: Record<string, string> = { free: 'FREE', business: 'BUSINESS', pro: 'PRO' };
-
-type ModalState =
-  | { type: 'kaspi'; plan: Plan }
-  | { type: 'returned'; plan: Plan }
-  | { type: 'confirm'; plan: Plan }
-  | null;
-
-export function SubscriptionPage() {
-  const { state, addPayment } = useApp();
-  const toast = useToast();
-  const [modal, setModal] = useState<ModalState>(null);
-  const [period, setPeriod] = useState<'month' | 'year'>('month');
+export const SubscriptionPage: React.FC = () => {
+  const { state, setPlan, referral, applyReferralCode } = useApp();
+  const [copied, setCopied] = useState(false);
+  const [inputCode, setInputCode] = useState('');
+  const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   const currentPlan = state.user?.plan || 'free';
 
-  const handleSelect = (plan: Plan) => {
-    if (plan.id === 'free') return;
-    setModal({ type: 'kaspi', plan });
+  const KASPI_PAY_LINK = 'https://pay.kaspi.kz/pay/6hpgsuja';
+
+  const plans: Array<{
+    id: UserProfile['plan'];
+    name: string;
+    price: string;
+    period: string;
+    description: string;
+    features: string[];
+    popular?: boolean;
+  }> = [
+    {
+      id: 'free',
+      name: 'Старт (Free)',
+      price: '0 ₸',
+      period: 'навсегда',
+      description: 'Базовый функционал для ознакомления и небольших проектов',
+      features: [
+        'Учет доходов и расходов',
+        'До 10 клиентов в базе',
+        'Базовые шаблоны документов',
+        '1 пользователь',
+      ],
+    },
+    {
+      id: 'pro',
+      name: 'Бизнес PRO',
+      price: '9 900 ₸',
+      period: 'в месяц',
+      description: 'Полный набор инструментов с AI-ассистентом для быстрого роста',
+      popular: true,
+      features: [
+        'Безлимитный финансовый учет',
+        'AI-аналитика и отчеты',
+        'Маркетплейс специалистов',
+        'Автогенерация документов',
+        'До 5 сотрудников',
+        'Приоритетная поддержка',
+      ],
+    },
+    {
+      id: 'enterprise',
+      name: 'Корпорация',
+      price: '29 900 ₸',
+      period: 'в месяц',
+      description: 'Максимальные мощности и индивидуальные интеграции',
+      features: [
+        'Всё, что есть в PRO',
+        'Неограниченное число сотрудников',
+        'Выделенный AI-агент под бизнес',
+        'Персональный менеджер 24/7',
+        'API и пользовательские интеграции',
+      ],
+    },
+  ];
+
+  const handleCopy = () => {
+    const link = `${window.location.origin}?ref=${referral.code}`;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleApplyCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = applyReferralCode(inputCode);
+    setMessage({ text: res.message, isError: !res.ok });
+    if (res.ok) setInputCode('');
+  };
+
+  const handleSelectPlan = (planId: UserProfile['plan']) => {
+    if (planId !== 'free') {
+      // Открываем Kaspi Pay в новой вкладке для проведения оплаты
+      window.open(KASPI_PAY_LINK, '_blank');
+    }
+    // Активируем выбранный план в приложении
+    setPlan(planId);
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Тарифы BIZBOX" subtitle="Выберите план, который подходит вашему бизнесу" />
-
-      <div className="flex items-center justify-center gap-3">
-        <button onClick={() => setPeriod('month')} className={cn('px-4 py-2 rounded-xl text-sm font-medium transition-all', period === 'month' ? 'bg-accent-500/15 text-accent-300' : 'text-white/50')}>Помесячно</button>
-        <button onClick={() => setPeriod('year')} className={cn('px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2', period === 'year' ? 'bg-accent-500/15 text-accent-300' : 'text-white/50')}>
-          Годовая <Badge tone="success">−20%</Badge>
-        </button>
+    <div className="max-w-6xl mx-auto p-6 space-y-10">
+      {/* Заголовок */}
+      <div className="text-center space-y-3">
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+          Управление подпиской и бонусами
+        </h1>
+        <p className="text-gray-500 max-w-2xl mx-auto">
+          Выберите подходящий тариф для вашего бизнеса или используйте реферальную программу, чтобы получать бонусы и бесплатный доступ.
+        </p>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
-        {plans.map(plan => {
-          const Icon = plan.icon;
-          const isCurrent = currentPlan === plan.id;
-          const price = period === 'year' ? Math.round(plan.price * 12 * 0.8) : plan.price;
+      {/* Карточки Тарифов */}
+      <div className="grid md:grid-cols-3 gap-6">
+        {plans.map((p) => {
+          const isCurrent = currentPlan === p.id;
+          const isPaid = p.id !== 'free';
+
           return (
-            <Card key={plan.id} className={cn('p-6 relative flex flex-col', plan.highlight && 'border-accent-500/40 shadow-glow-sm')}>
-              {plan.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge tone="accent" className="px-3 py-1">Популярный</Badge>
-                </div>
+            <div
+              key={p.id}
+              className={`relative flex flex-col justify-between p-6 rounded-2xl bg-white dark:bg-gray-800 border-2 transition-all shadow-sm ${
+                p.popular
+                  ? 'border-indigo-600 shadow-indigo-100 dark:shadow-none'
+                  : 'border-gray-200 dark:border-gray-700'
+              }`}
+            >
+              {p.popular && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-full flex items-center gap-1 shadow">
+                  <Sparkles className="w-3 h-3" /> Популярный выбор
+                </span>
               )}
-              <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center mb-4', plan.highlight ? 'bg-accent-500/15' : 'bg-white/5')}>
-                <Icon className={cn('w-5 h-5', plan.color)} />
-              </div>
-              <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-              <div className="mt-3 mb-5">
+
+              <div className="space-y-4">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">{p.name}</h3>
+                <p className="text-sm text-gray-500">{p.description}</p>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-bold text-white tabular-nums">{formatCurrency(plan.price)}</span>
-                  <span className="text-sm text-white/40">/мес</span>
+                  <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{p.price}</span>
+                  <span className="text-sm text-gray-500">/{p.period}</span>
                 </div>
+
+                <ul className="space-y-2.5 pt-4 border-t border-gray-100 dark:border-gray-700">
+                  {p.features.map((f, idx) => (
+                    <li key={idx} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="space-y-2.5 mb-6 flex-1">
-                {plan.features.map(f => (
-                  <li key={f} className="flex items-start gap-2.5">
-                    <div className={cn('w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5', plan.highlight ? 'bg-accent-500/20' : 'bg-white/5')}>
-                      <Check className={cn('w-2.5 h-2.5', plan.highlight ? 'text-accent-400' : 'text-white/50')} />
-                    </div>
-                    <span className="text-sm text-white/70">{f}</span>
-                  </li>
-                ))}
-              </ul>
-              {isCurrent ? (
-                <Button variant="secondary" className="w-full" disabled>Текущий тариф</Button>
-              ) : plan.id === 'free' ? (
-                <Button variant="outline" className="w-full" disabled={currentPlan !== 'free' ? false : true}>
-                  {currentPlan === 'free' ? 'Текущий тариф' : 'Выбрать FREE'}
-                </Button>
-              ) : (
-                <Button variant={plan.highlight ? 'primary' : 'outline'} className="w-full" onClick={() => handleSelect(plan)}>
-                  Оплатить {formatCurrency(plan.price)}
-                </Button>
-              )}
-            </Card>
+
+              <button
+                onClick={() => handleSelectPlan(p.id)}
+                disabled={isCurrent}
+                className={`w-full mt-6 py-2.5 px-4 rounded-xl font-semibold text-sm transition flex items-center justify-center gap-2 ${
+                  isCurrent
+                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-default'
+                    : isPaid
+                    ? 'bg-red-600 text-white hover:bg-red-700 shadow-md'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200'
+                }`}
+              >
+                {isCurrent ? (
+                  'Текущий тариф'
+                ) : isPaid ? (
+                  <>
+                    <span>Оплатить через Kaspi Pay</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </>
+                ) : (
+                  'Перейти на бесплатный'
+                )}
+              </button>
+            </div>
           );
         })}
       </div>
 
-      {/* Pending payment notice */}
-      {state.payments.filter(p => p.status === 'awaiting_confirmation' || p.status === 'under_review').length > 0 && (
-        <Card className="p-5 border-warning-500/30">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-warning-500/10 text-warning-400 flex items-center justify-center shrink-0">
-              <Clock className="w-5 h-5" />
+      {/* Реферальная программа */}
+      <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-2xl p-8 shadow-xl space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-indigo-700/50 pb-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-indigo-300 font-semibold text-sm">
+              <Gift className="w-5 h-5 text-amber-400" />
+              <span>Реферальная программа BIZBOX</span>
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-white">Оплата на проверке</p>
-              <p className="text-xs text-white/50 mt-0.5">
-                У вас есть запрос на оплату тарифа {state.payments.find(p => p.status === 'awaiting_confirmation' || p.status === 'under_review')?.plan === 'business' ? 'BUSINESS' : 'PRO'}. Мы активируем тариф после подтверждения оплаты.
-              </p>
+            <h2 className="text-2xl font-bold">Приглашайте друзей и получайте бонусы</h2>
+            <p className="text-indigo-200 text-sm max-w-xl">
+              Поделитесь ссылкой с коллегами. За каждого зарегистрированного пользователя вы получаете <strong>+500 ₸</strong> на бонусный баланс, а ваш друг — скидку на тариф PRO.
+            </p>
+          </div>
+
+          {/* Статистика */}
+          <div className="flex gap-4 bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/10 shrink-0">
+            <div className="text-center px-3">
+              <div className="flex items-center justify-center gap-1 text-xs text-indigo-200">
+                <Users className="w-3.5 h-3.5" /> Приглашено
+              </div>
+              <div className="text-xl font-extrabold mt-1">{referral.invitedCount} чел.</div>
+            </div>
+            <div className="w-px bg-indigo-700/50" />
+            <div className="text-center px-3">
+              <div className="flex items-center justify-center gap-1 text-xs text-indigo-200">
+                <Zap className="w-3.5 h-3.5 text-amber-400" /> Бонусы
+              </div>
+              <div className="text-xl font-extrabold mt-1 text-amber-400">{referral.bonusEarned} ₸</div>
             </div>
           </div>
-        </Card>
-      )}
+        </div>
 
-      <KaspiPayModal modal={modal} setModal={setModal} toast={toast} />
-      <ConfirmPaymentModal modal={modal} setModal={setModal} toast={toast} userName={state.user?.name || ''} userEmail={state.user?.email || ''} addPayment={addPayment} />
-      <ReturnedModal modal={modal} setModal={setModal} />
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Моя ссылка */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">
+              Ваша реферальная ссылка
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={`${window.location.origin}?ref=${referral.code}`}
+                className="w-full bg-white/10 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none"
+              />
+              <button
+                onClick={handleCopy}
+                className="bg-white text-indigo-900 font-semibold px-4 py-2 rounded-xl text-sm hover:bg-indigo-50 transition flex items-center gap-1.5 shrink-0"
+              >
+                {copied ? <ShieldCheck className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                {copied ? 'Скопировано!' : 'Копировать'}
+              </button>
+            </div>
+          </div>
+
+          {/* Ввод промокода */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">
+              Есть промокод или код друга?
+            </label>
+            <form onSubmit={handleApplyCode} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Введите код (например: HACKALEM)"
+                value={inputCode}
+                onChange={(e) => setInputCode(e.target.value)}
+                className="w-full bg-white/10 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-sm text-white placeholder-indigo-300 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="bg-amber-400 text-slate-900 font-bold px-4 py-2 rounded-xl text-sm hover:bg-amber-300 transition shrink-0"
+              >
+                Применить
+              </button>
+            </form>
+            {message && (
+              <p className={`text-xs mt-1 ${message.isError ? 'text-rose-300' : 'text-emerald-300'}`}>
+                {message.text}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
-}
-
-function KaspiPayModal({ modal, setModal, toast }: { modal: ModalState; setModal: (m: ModalState) => void; toast: ReturnType<typeof useToast> }) {
-  if (!modal || modal.type !== 'kaspi') return null;
-  const { plan } = modal;
-  const amount = planPrices[plan.id];
-  const amountStr = String(amount);
-
-  const copyAmount = async () => {
-    try {
-      await navigator.clipboard.writeText(amountStr);
-      toast.success('Сумма скопирована', `${amountStr} ₸ скопировано в буфер обмена`);
-    } catch {
-      toast.error('Не удалось скопировать', 'Скопируйте сумму вручную');
-    }
-  };
-
-  const goToKaspi = () => {
-    setModal({ type: 'returned', plan });
-    window.open(KASPI_PAY_URL, '_blank', 'noopener,noreferrer');
-  };
-
-  return (
-    <Modal open onClose={() => setModal(null)} title={`Оплата ${plan.name}`} subtitle={`Стоимость: ${formatCurrency(amount)} / месяц`} size="md">
-      <div className="space-y-5">
-        {/* Kaspi badge */}
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-bg-base border border-border">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#F14635] to-[#D31E28] flex items-center justify-center shrink-0">
-            <span className="text-white font-bold text-lg">K</span>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-white">Kaspi Pay</p>
-            <p className="text-2xs text-white/40">Оплата производится через Kaspi Pay</p>
-          </div>
-        </div>
-
-        {/* Amount instruction */}
-        <div className="p-4 rounded-xl bg-accent-500/5 border border-accent-500/20">
-          <p className="text-sm text-white/70 mb-3">
-            Введите сумму <span className="text-accent-300 font-semibold">{formatCurrency(amount)}</span> в Kaspi Pay
-          </p>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 px-3.5 h-11 rounded-xl bg-bg-base border border-border-strong">
-              <span className="text-lg font-bold text-white tabular-nums">{amountStr}</span>
-              <span className="text-sm text-white/40">₸</span>
-            </div>
-            <Button variant="secondary" onClick={copyAmount} className="shrink-0">
-              <Copy className="w-4 h-4" /> <span className="hidden sm:inline">Скопировать сумму</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Security note */}
-        <div className="flex items-start gap-2.5 p-3 rounded-lg bg-bg-base border border-border">
-          <ShieldCheck className="w-4 h-4 text-success-400 shrink-0 mt-0.5" />
-          <p className="text-2xs text-white/50 leading-relaxed">
-            Все платёжные данные вводятся только внутри Kaspi. BIZBOX не запрашивает и не хранит номера карт, CVV или пароли от Kaspi.
-          </p>
-        </div>
-
-        <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={() => setModal(null)}>Отмена</Button>
-          <Button className="flex-1" onClick={goToKaspi}>
-            <ExternalLink className="w-4 h-4" /> Перейти к оплате Kaspi
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function ReturnedModal({ modal, setModal }: { modal: ModalState; setModal: (m: ModalState) => void }) {
-  if (!modal || modal.type !== 'returned') return null;
-  const { plan } = modal;
-
-  return (
-    <Modal open onClose={() => setModal(null)} title="Оплатили?" size="sm">
-      <div className="space-y-5">
-        <p className="text-sm text-white/60 leading-relaxed">
-          После оплаты отправьте подтверждение, чтобы мы активировали тариф {plan.name}.
-        </p>
-        <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={() => setModal(null)}>
-            <ArrowLeft className="w-4 h-4" /> Вернуться
-          </Button>
-          <Button className="flex-1" onClick={() => setModal({ type: 'confirm', plan })}>
-            Я оплатил
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function ConfirmPaymentModal({ modal, setModal, toast, userName, userEmail, addPayment }: {
-  modal: ModalState;
-  setModal: (m: ModalState) => void;
-  toast: ReturnType<typeof useToast>;
-  userName: string;
-  userEmail: string;
-  addPayment: (p: Omit<PaymentRequest, 'id' | 'createdAt' | 'status'>) => string;
-}) {
-  if (!modal || modal.type !== 'confirm') return null;
-  const { plan } = modal;
-  const amount = planPrices[plan.id];
-
-  const [name, setName] = useState(userName);
-  const [phone, setPhone] = useState('');
-
-  const handleSubmit = () => {
-    if (!name.trim() || !phone.trim()) {
-      toast.error('Заполните все поля', 'Имя и телефон обязательны для подтверждения');
-      return;
-    }
-    addPayment({
-      userId: userEmail,
-      plan: plan.id as 'business' | 'pro',
-      amount,
-      customerName: name.trim(),
-      customerPhone: phone.trim(),
-    });
-    toast.success('Подтверждение отправлено', 'Оплата проверяется. Мы активируем тариф после проверки.');
-    setModal(null);
-  };
-
-  return (
-    <Modal open onClose={() => setModal(null)} title="Подтверждение оплаты" subtitle={`Тариф ${plan.name}`} size="md">
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Имя" required>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ваше имя" autoFocus />
-          </Field>
-          <Field label="Телефон" required>
-            <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 701 ..." inputMode="tel" />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Выбранный тариф">
-            <Input value={planNames[plan.id]} readOnly className="bg-bg-base text-white/50" />
-          </Field>
-          <Field label="Сумма">
-            <Input value={`${formatCurrency(amount)} ₸`} readOnly className="bg-bg-base text-white/50" />
-          </Field>
-        </div>
-
-        <div className="flex items-start gap-2.5 p-3 rounded-lg bg-warning-500/5 border border-warning-500/20">
-          <Clock className="w-4 h-4 text-warning-400 shrink-0 mt-0.5" />
-          <p className="text-2xs text-white/50 leading-relaxed">
-            После отправки подтверждения статус оплаты изменится на «Ожидает подтверждения». Тариф будет активирован после проверки оплаты администратором.
-          </p>
-        </div>
-
-        <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={() => setModal(null)}>Отмена</Button>
-          <Button className="flex-1" onClick={handleSubmit} disabled={!name.trim() || !phone.trim()}>
-            <Send className="w-4 h-4" /> Отправить подтверждение
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
+};

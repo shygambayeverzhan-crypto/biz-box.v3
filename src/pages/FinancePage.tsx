@@ -394,3 +394,4 @@ function TransactionModal({ open, onClose, editTx, onSave }: TransactionModalPro
     </Modal>
   );
 }
+export default SubscriptionPage;

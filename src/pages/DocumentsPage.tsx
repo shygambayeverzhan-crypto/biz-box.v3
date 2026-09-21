@@ -281,3 +281,4 @@ function DocumentPreviewModal({ doc, onClose, onStatusChange }: { doc: DocumentI
     </Modal>
   );
 }
+export default SubscriptionPage;

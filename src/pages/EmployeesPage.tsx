@@ -221,3 +221,4 @@ function EmployeeModal({ open, onClose, editEmp, onSave }: { open: boolean; onCl
     </Modal>
   );
 }
+export default SubscriptionPage;

@@ -184,3 +184,4 @@ export function OnboardingPage() {
     </div>
   );
 }
+export default SubscriptionPage;

@@ -314,3 +314,4 @@ function ClientProfile({ client, onBack, onDelete, onAddNote, onAddActivity }: {
     </div>
   );
 }
+export default SubscriptionPage;

@@ -324,3 +324,4 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
     );
   }
 }
+export default SubscriptionPage;

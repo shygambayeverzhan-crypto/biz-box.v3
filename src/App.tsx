@@ -13,7 +13,7 @@ import { TasksPage } from '@/pages/TasksPage';
 import { EmployeesPage } from '@/pages/EmployeesPage';
 import { CalendarPage } from '@/pages/CalendarPage';
 import { SpecialistsPage } from '@/pages/SpecialistsPage';
-import { SubscriptionPage } from '@/pages/SubscriptionPage';
+import SubscriptionPage from '@/pages/SubscriptionPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { Lock } from 'lucide-react';
 import type { Page } from '@/types';

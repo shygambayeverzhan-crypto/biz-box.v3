@@ -293,3 +293,4 @@ function TaskModal({ open, onClose, editTask, employees, onSave }: { open: boole
     </Modal>
   );
 }
+export default SubscriptionPage;

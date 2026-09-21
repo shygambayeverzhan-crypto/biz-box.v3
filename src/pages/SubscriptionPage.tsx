@@ -144,6 +144,4 @@ const SubscriptionPage = () => {
     </div>
   );
 };
-
-export { SubscriptionPage };
 export default SubscriptionPage;

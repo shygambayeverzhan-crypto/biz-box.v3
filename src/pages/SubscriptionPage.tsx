@@ -3,7 +3,9 @@ import { useApp } from '@/store/AppContext';
 import { Specialist } from '@/types';
 import { Star, MapPin, Briefcase, CheckCircle, Search } from 'lucide-react';
 
-export const SpecialistsPage: React.FC = () => {
+export const SubscriptionPage = () => {
+  // ... код компонента
+};
   const { state } = useApp();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Все');
@@ -110,3 +112,4 @@ export const SpecialistsPage: React.FC = () => {
     </div>
   );
 };
+export default SubscriptionPage;

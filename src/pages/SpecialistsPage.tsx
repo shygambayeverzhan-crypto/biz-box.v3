@@ -2,33 +2,20 @@ import React, { useState } from 'react';
 import { useApp } from '@/store/AppContext';
 import { Star, MapPin, Briefcase, CheckCircle, Search } from 'lucide-react';
 
-interface SpecialistItem {
-  id: string;
-  name: string;
-  profession: string;
-  category: string;
-  rating: number;
-  projects: number;
-  price: number;
-  location: string;
-  bio: string;
-  avatarColor?: string;
-}
-
 export const SpecialistsPage: React.FC = () => {
   const { state } = useApp();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Все');
 
-  const specialists: SpecialistItem[] = (state as any)?.specialists || [];
+  const specialists = (state as any)?.specialists || [];
   const categories = ['Все', 'Бухгалтерия', 'Юристы', 'Маркетинг', 'Дизайн', 'HR', 'IT', 'Фото и видео'];
 
-  const filtered = specialists.filter((s) => {
+  const filtered = specialists.filter((s: any) => {
     const matchesCategory = selectedCategory === 'Все' || s.category === selectedCategory;
     const matchesSearch =
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.profession.toLowerCase().includes(search.toLowerCase()) ||
-      s.location.toLowerCase().includes(search.toLowerCase());
+      s.name?.toLowerCase().includes(search.toLowerCase()) ||
+      s.profession?.toLowerCase().includes(search.toLowerCase()) ||
+      s.location?.toLowerCase().includes(search.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
@@ -69,7 +56,7 @@ export const SpecialistsPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filtered.map((s) => (
+        {filtered.map((s: any) => (
           <div
             key={s.id}
             className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-5 flex flex-col justify-between space-y-4 hover:shadow-md transition"
@@ -78,7 +65,7 @@ export const SpecialistsPage: React.FC = () => {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-bold flex items-center justify-center text-lg">
-                    {s.name.slice(0, 1)}
+                    {s.name?.slice(0, 1)}
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-white text-base">{s.name}</h3>

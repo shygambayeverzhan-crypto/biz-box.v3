@@ -181,7 +181,7 @@ const specialists: Specialist[] = [
 
 export function createSeedState(): AppState {
   return {
-    user: { name: 'Ержан', email: 'demo@bizbox.app', plan: 'business' },
+    user: { name: 'Ержан', email: 'demo@bizbox.app', plan: 'free' },
     business: { name: 'Nova Studio', industry: 'Digital agency', city: 'Астана', employeesCount: '4', modules: ['finance', 'documents', 'clients', 'tasks', 'employees'] },
     onboardingComplete: true,
     transactions,

@@ -17,12 +17,13 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { Lock } from 'lucide-react';
 import type { Page } from '@/types';
 
-// Защитный компонент-заглушка для платных разделов
+// Защитный блок
 function Guard({ children, onNavigate }: { children: React.ReactNode; onNavigate: (p: Page) => void }) {
   const { state } = useApp();
-  const userPlan = state.user?.plan || 'free';
+  const userPlan = (state.user?.plan || 'free').toLowerCase();
 
-  if (userPlan === 'free') {
+  // Покажем замок, если тариф НЕ 'pro' и НЕ 'enterprise'
+  if (userPlan !== 'pro' && userPlan !== 'enterprise') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
         <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mb-4 shadow-sm">
@@ -30,7 +31,7 @@ function Guard({ children, onNavigate }: { children: React.ReactNode; onNavigate
         </div>
         <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">Доступ ограничен</h2>
         <p className="text-gray-500 max-w-md mb-6">
-          Этот раздел доступен только на тарифе <strong>PRO</strong>. Оформите подписку или примените промокод, чтобы разблокировать все возможности.
+          Этот раздел доступен только на тарифе <strong>PRO</strong>. Оформите подписку или примените промокод, чтобы разблокировать доступ.
         </p>
         <button
           onClick={() => onNavigate('subscription')}
@@ -63,8 +64,8 @@ function AppContent() {
     <AppLayout current={page} onNavigate={handleNavigate}>
       {page === 'dashboard' && <DashboardPage onNavigate={handleNavigate} />}
       {page === 'finance' && <FinancePage />}
-      
-      {/* Закрытые страницы (обернуты в Guard) */}
+
+      {/* ЗАКРЫТЫЕ РАЗДЕЛЫ ДЛЯ ФРИ ТАРИФА */}
       {page === 'documents' && (
         <Guard onNavigate={handleNavigate}>
           <DocumentsPage />
@@ -81,7 +82,7 @@ function AppContent() {
         </Guard>
       )}
 
-      {/* Открытые страницы */}
+      {/* ОТКРЫТЫЕ РАЗДЕЛЫ */}
       {page === 'clients' && <ClientsPage />}
       {page === 'tasks' && <TasksPage />}
       {page === 'calendar' && <CalendarPage />}

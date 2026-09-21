@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { AppProvider, useApp } from '@/store/AppContext';
 import { ToastProvider } from '@/store/ToastContext';
 import { AppLayout } from '@/components/Layout';
@@ -11,14 +12,14 @@ import { ClientsPage } from '@/pages/ClientsPage';
 import { TasksPage } from '@/pages/TasksPage';
 import { EmployeesPage } from '@/pages/EmployeesPage';
 import { CalendarPage } from '@/pages/CalendarPage';
-import { SpecialistsPage } from '@/pages/SpecialistsPage';
+import SpecialistsPage from '@/pages/SpecialistsPage';
 import { SubscriptionPage } from '@/pages/SubscriptionPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { Lock } from 'lucide-react';
 import type { Page } from '@/types';
 
 // Защитный блок
-function Guard({ children, onNavigate }: { children: React.ReactNode; onNavigate: (p: Page) => void }) {
+function Guard({ children, onNavigate }: { children: ReactNode; onNavigate: (p: Page) => void }) {
   const { state } = useApp();
   const userPlan = (state.user?.plan || 'free').toLowerCase();
 

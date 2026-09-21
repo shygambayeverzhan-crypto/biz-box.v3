@@ -1,14 +1,26 @@
 import React, { useState } from 'react';
 import { useApp } from '@/store/AppContext';
-import { Specialist } from '@/types';
 import { Star, MapPin, Briefcase, CheckCircle, Search } from 'lucide-react';
+
+interface SpecialistItem {
+  id: string;
+  name: string;
+  profession: string;
+  category: string;
+  rating: number;
+  projects: number;
+  price: number;
+  location: string;
+  bio: string;
+  avatarColor?: string;
+}
 
 export const SpecialistsPage: React.FC = () => {
   const { state } = useApp();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Все');
 
-  const specialists: Specialist[] = state.specialists || [];
+  const specialists: SpecialistItem[] = (state as any)?.specialists || [];
   const categories = ['Все', 'Бухгалтерия', 'Юристы', 'Маркетинг', 'Дизайн', 'HR', 'IT', 'Фото и видео'];
 
   const filtered = specialists.filter((s) => {
@@ -96,7 +108,7 @@ export const SpecialistsPage: React.FC = () => {
             <div className="flex items-center justify-between border-t dark:border-gray-700 pt-3 mt-2">
               <div>
                 <span className="text-xs text-gray-400">Услуги от</span>
-                <p className="text-base font-bold text-gray-900 dark:text-white">{s.price.toLocaleString()} ₸</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white">{s.price?.toLocaleString()} ₸</p>
               </div>
               <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-1">
                 <CheckCircle className="w-3.5 h-3.5" />
@@ -110,5 +122,4 @@ export const SpecialistsPage: React.FC = () => {
   );
 };
 
-// Добавляем дефолтный экспорт на всякий случай
 export default SpecialistsPage;

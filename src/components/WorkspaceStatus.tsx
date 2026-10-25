@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CloudCheck, CloudUpload, AlertCircle, RefreshCw, Download, ArrowRight } from 'lucide-react';
+import { CheckCircle2, CloudUpload, AlertCircle, RefreshCw, Download, ArrowRight } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/Button';
@@ -32,7 +32,7 @@ export function SyncBanner() {
   return (
     <div className={failed ? 'bg-amber-400/10 border-b border-amber-400/20 px-4 py-3' : 'border-b border-border px-4 py-2'} role={failed ? 'alert' : 'status'} aria-live="polite">
       <div className="flex items-center justify-center gap-2 text-xs">
-        {failed ? <AlertCircle className="w-4 h-4 text-amber-300" /> : syncStatus === 'saving' ? <CloudUpload className="w-4 h-4 text-accent-400 animate-pulse" /> : <CloudCheck className="w-4 h-4 text-emerald-400" />}
+        {failed ? <AlertCircle className="w-4 h-4 text-amber-300" /> : syncStatus === 'saving' ? <CloudUpload className="w-4 h-4 text-accent-400 animate-pulse" /> : <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
         <span className={failed ? 'text-amber-200' : 'text-white/50'}>{failed ? syncError : syncStatus === 'saving' ? 'Сохраняем в Telegram… Не закрывай приложение.' : syncStatus === 'saved' ? 'Сохранено в Telegram' : 'Telegram подключён'}</span>
         <span className="text-white/25 ml-2 shrink-0">{APP_VERSION}</span>
       </div>

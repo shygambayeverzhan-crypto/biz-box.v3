@@ -168,6 +168,7 @@ export interface AppState {
   user: UserProfile | null;
   business: BusinessProfile | null;
   onboardingComplete: boolean;
+  onboardingStep?: number;
   transactions: Transaction[];
   documents: DocumentItem[];
   clients: Client[];

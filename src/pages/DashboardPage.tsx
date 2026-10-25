@@ -243,4 +243,4 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
     </div>
   );
 }
-export default SubscriptionPage;
+export default DashboardPage;

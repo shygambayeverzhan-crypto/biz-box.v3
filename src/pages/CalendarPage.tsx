@@ -131,4 +131,4 @@ export function CalendarPage() {
     </div>
   );
 }
-export default SubscriptionPage;
+export default CalendarPage;

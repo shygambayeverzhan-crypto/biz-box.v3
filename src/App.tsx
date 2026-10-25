@@ -17,6 +17,7 @@ import SubscriptionPageComponent from '@/pages/SubscriptionPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { Lock } from 'lucide-react';
 import type { Page } from '@/types';
+import { WorkspaceLoading, SyncBanner, LegacyImport } from '@/components/WorkspaceStatus';
 
 function Guard({ children, onNavigate }: { children: ReactNode; onNavigate: (p: Page) => void }) {
   const { state } = useApp();
@@ -43,20 +44,22 @@ function Guard({ children, onNavigate }: { children: ReactNode; onNavigate: (p: 
 }
 
 function AppContent() {
-  const { auth, state } = useApp();
+  const { auth, state, bootStatus, legacyState } = useApp();
   const [page, setPage] = useState<Page>('dashboard');
 
   useEffect(() => {
-    if (!auth.email) setPage('dashboard');
-  }, [auth.email]);
+    if (!auth.mode) setPage('dashboard');
+  }, [auth.mode]);
 
-  if (!auth.email) return <AuthPage />;
-  if (auth.isNew && !state.onboardingComplete) return <OnboardingPage />;
+  if (bootStatus !== 'ready') return <WorkspaceLoading />;
+  if (!auth.mode) return <AuthPage />;
+  if (legacyState) return <LegacyImport />;
+  if (!state.onboardingComplete) return <><SyncBanner /><OnboardingPage /></>;
 
   const handleNavigate = (p: Page) => setPage(p);
 
   return (
-    <AppLayout current={page} onNavigate={handleNavigate}>
+    <><SyncBanner /><AppLayout current={page} onNavigate={handleNavigate}>
       {page === 'dashboard' && <DashboardPage onNavigate={handleNavigate} />}
       {page === 'finance' && <FinancePage />}
       {page === 'documents' && <Guard onNavigate={handleNavigate}><DocumentsPage /></Guard>}
@@ -67,7 +70,7 @@ function AppContent() {
       {page === 'calendar' && <CalendarPage />}
       {page === 'subscription' && <SubscriptionPageComponent />}
       {page === 'settings' && <SettingsPage onNavigate={handleNavigate} />}
-    </AppLayout>
+    </AppLayout></>
   );
 }
 

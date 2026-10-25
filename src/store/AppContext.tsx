@@ -136,9 +136,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const completeOnboarding = useCallback((business: BusinessProfile) => {
-    setState(s => ({ ...s, business, onboardingComplete: true }));
-    setAuth(a => ({ ...a, isNew: false }));
-  }, []);
+    const completedState = { ...state, business, onboardingComplete: true };
+    const completedAuth = { ...auth, isNew: false };
+
+    // Persist immediately: Telegram may close the WebView before React effects run.
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(completedState));
+      localStorage.setItem(AUTH_KEY, JSON.stringify(completedAuth));
+    } catch {
+      // Keep the current session usable when browser storage is unavailable.
+    }
+
+    setState(completedState);
+    setAuth(completedAuth);
+  }, [state, auth]);
 
   const updateUser = useCallback((patch: Partial<UserProfile>) => {
     setState(s => s.user ? { ...s, user: { ...s.user, ...patch } } : s);

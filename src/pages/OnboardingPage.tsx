@@ -27,36 +27,6 @@ const employeeOptions = [
   { value: '50+', label: 'Более 50' },
 ];
 
-const ONBOARDING_DRAFT_KEY = 'bizbox_onboarding_draft_v1';
-
-interface OnboardingDraft {
-  step: number;
-  business: BusinessProfile;
-}
-
-function loadOnboardingDraft(userEmail?: string): OnboardingDraft | null {
-  const storageKey = userEmail ? `${ONBOARDING_DRAFT_KEY}_${encodeURIComponent(userEmail)}` : ONBOARDING_DRAFT_KEY;
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return null;
-    const draft = JSON.parse(raw) as OnboardingDraft;
-    if (
-      !Number.isInteger(draft.step) ||
-      draft.step < 0 ||
-      draft.step > 2 ||
-      !draft.business ||
-      typeof draft.business.name !== 'string' ||
-      typeof draft.business.industry !== 'string' ||
-      typeof draft.business.city !== 'string' ||
-      typeof draft.business.employeesCount !== 'string' ||
-      !Array.isArray(draft.business.modules)
-    ) return null;
-    return draft;
-  } catch {
-    return null;
-  }
-}
-
 const modules = [
   { key: 'finance', label: 'Финансы', icon: Wallet, desc: 'Учёт доходов и расходов' },
   { key: 'documents', label: 'Документы', icon: FileText, desc: 'Договоры, счета, акты' },
@@ -66,28 +36,26 @@ const modules = [
 ];
 
 export function OnboardingPage() {
-  const { completeOnboarding, state } = useApp();
+  const { completeOnboarding, saveOnboardingDraft, state } = useApp();
   const toast = useToast();
-  const draftStorageKey = state.user?.email ? `${ONBOARDING_DRAFT_KEY}_${encodeURIComponent(state.user.email)}` : ONBOARDING_DRAFT_KEY;
-  const [initialDraft] = useState(() => loadOnboardingDraft(state.user?.email));
-  const [step, setStep] = useState(initialDraft?.step ?? 0);
-  const [business, setBusiness] = useState<BusinessProfile>(initialDraft?.business ?? {
+  const [step, setStep] = useState(state.onboardingStep ?? 0);
+  const [business, setBusiness] = useState<BusinessProfile>(state.business ?? {
     name: '',
     industry: '',
     city: '',
     employeesCount: '',
     modules: ['finance', 'documents', 'clients', 'tasks', 'employees'],
   });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const completedRef = useRef(false);
 
   useEffect(() => {
-    if (completedRef.current) return;
-    try {
-      localStorage.setItem(draftStorageKey, JSON.stringify({ step, business }));
-    } catch {
-      // Continue onboarding even if browser storage is unavailable.
-    }
-  }, [step, business, draftStorageKey]);
+    const timer = setTimeout(() => {
+      if (!completedRef.current) saveOnboardingDraft(business, step);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [step, business, saveOnboardingDraft]);
 
   const toggleModule = (key: string) => {
     setBusiness(b => ({
@@ -97,22 +65,25 @@ export function OnboardingPage() {
   };
 
   const canProceed = () => {
-    if (step === 0) return business.name && business.industry && business.city && business.employeesCount;
+    if (step === 0) return business.name.trim() && business.industry && business.city.trim() && business.employeesCount;
     if (step === 1) return business.modules.length > 0;
     return true;
   };
 
-  const next = () => {
-    if (step < 2) setStep(s => s + 1);
-    else {
-      completedRef.current = true;
-      try {
-        localStorage.removeItem(draftStorageKey);
-      } catch {
-        // The completed profile is saved by AppContext.
-      }
-      completeOnboarding(business);
-      toast.success('BIZBOX готов!', 'Ваш бизнес успешно настроен. Добро пожаловать!');
+  const next = async () => {
+    if (saving) return;
+    if (step < 2) { setStep(s => s + 1); return; }
+    completedRef.current = true;
+    setSaving(true);
+    setSaveError('');
+    try {
+      await completeOnboarding({ ...business, name: business.name.trim(), city: business.city.trim() });
+      toast.success('Всё сохранено', 'Твой BizBox готов к работе.');
+    } catch (error) {
+      completedRef.current = false;
+      setSaveError(error instanceof Error ? error.message : 'Не получилось сохранить. Попробуй ещё раз.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -140,14 +111,14 @@ export function OnboardingPage() {
                 <p className="text-sm text-white/50 mt-1 mb-6">Это поможет настроить BIZBOX под ваши задачи.</p>
                 <div className="space-y-4">
                   <Field label="Название бизнеса" required>
-                    <Input value={business.name} onChange={e => setBusiness({ ...business, name: e.target.value })} placeholder="Nova Studio" autoFocus />
+                    <Input value={business.name} onChange={e => setBusiness({ ...business, name: e.target.value })} placeholder="Например, моя кофейня" maxLength={120} autoFocus />
                   </Field>
                   <Field label="Сфера деятельности" required>
                     <Select value={business.industry} onChange={e => setBusiness({ ...business, industry: e.target.value })} options={industries} placeholder="Выберите сферу" />
                   </Field>
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="Город" required>
-                      <Input value={business.city} onChange={e => setBusiness({ ...business, city: e.target.value })} placeholder="Астана" />
+                      <Input value={business.city} onChange={e => setBusiness({ ...business, city: e.target.value })} placeholder="Астана" maxLength={80} />
                     </Field>
                     <Field label="Сотрудников" required>
                       <Select value={business.employeesCount} onChange={e => setBusiness({ ...business, employeesCount: e.target.value })} options={employeeOptions} placeholder="Выберите" />
@@ -196,9 +167,9 @@ export function OnboardingPage() {
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center mx-auto mb-5 shadow-glow animate-scale-in">
                   <PartyPopper className="w-8 h-8 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold text-white">Ваш BIZBOX готов</h2>
+                <h2 className="text-2xl font-bold text-white">Остался один шаг</h2>
                 <p className="text-sm text-white/50 mt-2 max-w-xs mx-auto">
-                  {userName}, мы настроили рабочее пространство для «{business.name}». Всё готово к работе.
+                  {userName}, сохраним «{business.name}» в Telegram. При следующем открытии ты попадёшь сразу в свой бизнес.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 mt-6">
                   {business.modules.map(m => {
@@ -216,14 +187,15 @@ export function OnboardingPage() {
               </div>
             )}
 
+            {saveError && <p role="alert" className="mt-5 text-sm text-amber-300">{saveError}</p>}
             <div className="flex items-center justify-between mt-8">
               {step > 0 ? (
-                <Button variant="ghost" onClick={() => setStep(s => s - 1)}>
+                <Button variant="ghost" disabled={saving} onClick={() => setStep(s => s - 1)}>
                   <ArrowLeft className="w-4 h-4" /> Назад
                 </Button>
               ) : <div />}
-              <Button onClick={next} disabled={!canProceed()}>
-                {step < 2 ? <>Далее <ArrowRight className="w-4 h-4" /></> : <>Перейти в BIZBOX <ArrowRight className="w-4 h-4" /></>}
+              <Button onClick={() => void next()} disabled={saving || !canProceed()}>
+                {saving ? 'Сохраняем…' : step < 2 ? <>Далее <ArrowRight className="w-4 h-4" /></> : <>Перейти в BIZBOX <ArrowRight className="w-4 h-4" /></>}
               </Button>
             </div>
           </div>
@@ -232,4 +204,4 @@ export function OnboardingPage() {
     </div>
   );
 }
-export default SubscriptionPage;
+export default OnboardingPage;

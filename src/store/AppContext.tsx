@@ -1,34 +1,34 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode, type SetStateAction } from 'react';
 import type {
   AppState, Transaction, DocumentItem, Client, Task, Employee,
-  AppNotification, CalendarEvent, BusinessProfile, UserProfile,
-  PaymentRequest, PaymentStatus,
+  BusinessProfile, UserProfile, PaymentRequest, PaymentStatus,
 } from '@/types';
 import { createSeedState, createNewUserState } from '@/lib/seed';
 import { uid } from '@/lib/format';
+import { loadWorkspace, saveWorkspace, isWorkspaceState, type CloudStorage } from '@/lib/cloudWorkspace';
+import { getTelegram, isTelegramLaunch, telegramDisplayName } from '@/lib/telegram';
 
-const STORAGE_KEY = 'bizbox_state_v1';
-const AUTH_KEY = 'bizbox_auth_v1';
-const REF_KEY = 'bizbox_ref_stats_v1';
-
-interface AuthState {
-  email: string | null;
-  isNew: boolean;
-}
-
-interface ReferralStats {
-  code: string;
-  invitedCount: number;
-  bonusEarned: number;
-}
-
+interface AuthState { mode: 'telegram' | 'demo' | null }
+interface ReferralStats { code: string; invitedCount: number; bonusEarned: number }
+export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error';
 interface AppContextValue {
   state: AppState;
   auth: AuthState;
   referral: ReferralStats;
-  login: (email: string) => { ok: boolean; isNew: boolean };
+  bootStatus: 'loading' | 'ready' | 'error';
+  bootError: string;
+  syncStatus: SyncStatus;
+  syncError: string;
+  legacyState: AppState | null;
+  startDemo: () => void;
   logout: () => void;
-  completeOnboarding: (business: BusinessProfile) => void;
+  reloadWorkspace: () => Promise<void>;
+  retrySave: () => Promise<void>;
+  importLegacy: () => Promise<void>;
+  dismissLegacy: () => void;
+  exportWorkspace: () => void;
+  saveOnboardingDraft: (business: BusinessProfile, step: number) => void;
+  completeOnboarding: (business: BusinessProfile) => Promise<void>;
   updateUser: (patch: Partial<UserProfile>) => void;
   updateBusiness: (patch: Partial<BusinessProfile>) => void;
   addTransaction: (t: Omit<Transaction, 'id'>) => void;
@@ -60,134 +60,245 @@ interface AppContextValue {
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
+const emptyState = () => ({ ...createNewUserState('', ''), user: null });
+const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Не удалось связаться с Telegram. Попробуйте ещё раз.';
 
-function loadState(): AppState {
+function readLegacy(): AppState | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as AppState;
-  } catch { /* ignore */ }
-  
-  // Создаем дефолтное состояние и ПРИНУДИТЕЛЬНО ставим тариф 'free' для теста ограничений
-  const seed = createSeedState();
-  if (seed.user) {
-    seed.user.plan = 'free';
-  }
-  return seed;
-}
-
-function loadAuth(): AuthState {
-  try {
-    const raw = localStorage.getItem(AUTH_KEY);
-    if (raw) return JSON.parse(raw) as AuthState;
-  } catch { /* ignore */ }
-  return { email: null, isNew: false };
-}
-
-function loadReferral(): ReferralStats {
-  try {
-    const raw = localStorage.getItem(REF_KEY);
-    if (raw) return JSON.parse(raw) as ReferralStats;
-  } catch { /* ignore */ }
-  return {
-    code: 'BIZ-' + Math.random().toString(36).substring(2, 7).toUpperCase(),
-    invitedCount: 3,
-    bonusEarned: 1500,
-  };
+    const value = JSON.parse(localStorage.getItem('bizbox_state_v1') || 'null');
+    // Old email login wasn't verified. Import is always an explicit user choice.
+    if (isWorkspaceState(value) && value.user?.email && value.user.email !== 'demo@bizbox.app' && value.onboardingComplete && value.business?.name) return value;
+  } catch { /* Legacy browser storage may be unavailable. */ }
+  return null;
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AppState>(loadState);
-  const [auth, setAuth] = useState<AuthState>(loadAuth);
-  const [referral, setReferral] = useState<ReferralStats>(loadReferral);
+  const [state, setReactState] = useState<AppState>(emptyState);
+  const [auth, setAuth] = useState<AuthState>({ mode: null });
+  const [referral, setReferral] = useState<ReferralStats>({ code: '', invitedCount: 0, bonusEarned: 0 });
+  const [bootStatus, setBootStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [bootError, setBootError] = useState('');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [syncError, setSyncError] = useState('');
+  const [legacyState, setLegacyState] = useState<AppState | null>(null);
+  const stateRef = useRef(state);
+  const modeRef = useRef<AuthState['mode']>(null);
+  const storageRef = useRef<CloudStorage | null>(null);
+  const revisionRef = useRef<string | null>(null);
+  const pendingRef = useRef<AppState | null>(null);
+  const savingRef = useRef<Promise<void> | null>(null);
+  const completingRef = useRef(false);
+  const bootRun = useRef(0);
+  const cacheKey = useRef<string | null>(null);
 
-  useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* quota */ }
-  }, [state]);
-
-  useEffect(() => {
-    try { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); } catch { /* quota */ }
-  }, [auth]);
-
-  useEffect(() => {
-    try { localStorage.setItem(REF_KEY, JSON.stringify(referral)); } catch { /* quota */ }
-  }, [referral]);
-
-  const login = useCallback((email: string): { ok: boolean; isNew: boolean } => {
-    const existing = loadState();
-    const isDemo = email === 'demo@bizbox.app';
-    const isNewUser = !isDemo && (!existing.user || existing.user.email !== email);
-
-    if (isNewUser) {
-      const name = email.split('@')[0];
-      const fresh = createNewUserState(email, name.charAt(0).toUpperCase() + name.slice(1));
-      if (fresh.user) fresh.user.plan = 'free';
-      setState(fresh);
-      setAuth({ email, isNew: true });
-      return { ok: true, isNew: true };
-    }
-
-    setState(existing);
-    setAuth({ email, isNew: false });
-    return { ok: true, isNew: false };
+  const replaceState = useCallback((next: AppState) => {
+    stateRef.current = next;
+    setReactState(next);
   }, []);
+
+  const cacheLocalCopy = useCallback((next: AppState) => {
+    if (!cacheKey.current) return;
+    try { localStorage.setItem(cacheKey.current, JSON.stringify(next)); } catch { /* Cloud is authoritative. */ }
+  }, []);
+
+  const flush = useCallback((): Promise<void> => {
+    if (savingRef.current) return savingRef.current;
+    if (!pendingRef.current || !storageRef.current) return Promise.resolve();
+    let succeeded = false;
+    const task = (async () => {
+      setSyncStatus('saving');
+      setSyncError('');
+      getTelegram()?.enableClosingConfirmation?.();
+      while (pendingRef.current) {
+        const next = pendingRef.current;
+        pendingRef.current = null;
+        try {
+          revisionRef.current = await saveWorkspace(storageRef.current!, next, revisionRef.current);
+          cacheLocalCopy(pendingRef.current || next);
+          if (next.onboardingComplete && !stateRef.current.onboardingComplete) {
+            replaceState(next);
+            setLegacyState(null);
+          }
+        } catch (error) {
+          pendingRef.current = pendingRef.current || next;
+          setSyncStatus('error');
+          setSyncError(errorMessage(error));
+          throw error;
+        }
+      }
+      setSyncStatus('saved');
+      getTelegram()?.disableClosingConfirmation?.();
+      succeeded = true;
+    })();
+    savingRef.current = task.finally(() => {
+      savingRef.current = null;
+      if (succeeded && pendingRef.current) return flush();
+    });
+    return savingRef.current;
+  }, [cacheLocalCopy, replaceState]);
+
+  const setState = useCallback((update: SetStateAction<AppState>) => {
+    const next = typeof update === 'function' ? update(stateRef.current) : update;
+    if (next === stateRef.current) return;
+    replaceState(next);
+    if (modeRef.current === 'telegram') {
+      cacheLocalCopy(next);
+      pendingRef.current = next;
+      void flush().catch(() => { /* Visible sync error + explicit retry. */ });
+    }
+  }, [replaceState, cacheLocalCopy, flush]);
+
+  const reloadWorkspace = useCallback(async () => {
+    // Wait for any in-flight write before a user-requested reload.
+    if (savingRef.current) await savingRef.current.catch(() => {});
+    const run = ++bootRun.current;
+    setBootStatus('loading');
+    setBootError('');
+    try {
+      const app = getTelegram();
+      if (!app) {
+        if (isTelegramLaunch()) throw new Error('Telegram не передал данные входа. Обновите Telegram и откройте приложение снова через профиль бота.');
+        modeRef.current = null;
+        setAuth({ mode: null });
+        setBootStatus('ready');
+        return;
+      }
+      app.ready();
+      app.expand();
+      if (!app.isVersionAtLeast('6.9') || !app.CloudStorage) {
+        throw new Error('Для сохранения нужен свежий Telegram. Обновите его и откройте BizBox снова.');
+      }
+      storageRef.current = app.CloudStorage;
+      const loaded = await loadWorkspace(app.CloudStorage);
+      if (run !== bootRun.current) return;
+      revisionRef.current = loaded.revision;
+      pendingRef.current = null;
+      modeRef.current = 'telegram';
+      const id = app.initDataUnsafe?.user?.id;
+      cacheKey.current = Number.isSafeInteger(id) ? 'bizbox_cache_v2_' + id : null;
+      const next = loaded.state || createNewUserState('', telegramDisplayName(app));
+      replaceState(next);
+      setAuth({ mode: 'telegram' });
+      setLegacyState(loaded.state ? null : readLegacy());
+      setSyncStatus(loaded.state ? 'saved' : 'idle');
+      setSyncError('');
+      app.disableClosingConfirmation?.();
+      setBootStatus('ready');
+    } catch (error) {
+      if (run !== bootRun.current) return;
+      setBootError(errorMessage(error));
+      setBootStatus('error');
+    }
+  }, [replaceState]);
+
+  useEffect(() => { void reloadWorkspace(); }, [reloadWorkspace]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (pendingRef.current || savingRef.current) { event.preventDefault(); event.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, []);
+
+  const startDemo = useCallback(() => {
+    if (getTelegram()) return; // Real Telegram sessions always use their cloud workspace.
+    modeRef.current = 'demo';
+    replaceState(createSeedState());
+    setAuth({ mode: 'demo' });
+    setSyncStatus('idle');
+  }, [replaceState]);
 
   const logout = useCallback(() => {
-    setAuth({ email: null, isNew: false });
-  }, []);
-
-  const completeOnboarding = useCallback((business: BusinessProfile) => {
-    const completedState = { ...state, business, onboardingComplete: true };
-    const completedAuth = { ...auth, isNew: false };
-
-    // Persist immediately: Telegram may close the WebView before React effects run.
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(completedState));
-      localStorage.setItem(AUTH_KEY, JSON.stringify(completedAuth));
-    } catch {
-      // Keep the current session usable when browser storage is unavailable.
+    if (modeRef.current === 'telegram') {
+      void flush().then(() => getTelegram()?.close()).catch(() => {});
+      return;
     }
+    modeRef.current = null;
+    replaceState(emptyState());
+    setAuth({ mode: null });
+  }, [flush, replaceState]);
 
-    setState(completedState);
-    setAuth(completedAuth);
-  }, [state, auth]);
+  const completeOnboarding = useCallback(async (business: BusinessProfile) => {
+    const next = { ...stateRef.current, business, onboardingComplete: true, onboardingStep: 2 };
+    if (modeRef.current !== 'telegram' || !storageRef.current) throw new Error('Откройте BizBox в Telegram.');
+    completingRef.current = true;
+    pendingRef.current = next;
+    try {
+      await flush(); // Do not leave onboarding until Telegram acknowledges the committed snapshot.
+    } finally {
+      completingRef.current = false;
+    }
+  }, [flush]);
+
+  const saveOnboardingDraft = useCallback((business: BusinessProfile, step: number) => {
+    if (stateRef.current.onboardingComplete || completingRef.current || pendingRef.current?.onboardingComplete) return;
+    setState(previous => ({ ...previous, business, onboardingStep: step }));
+  }, [setState]);
+
+  const retrySave = useCallback(async () => {
+    const retryingCompletion = Boolean(pendingRef.current?.onboardingComplete && !stateRef.current.onboardingComplete);
+    if (retryingCompletion) completingRef.current = true;
+    try { await flush(); } finally {
+      if (retryingCompletion) completingRef.current = false;
+    }
+  }, [flush]);
+  const dismissLegacy = useCallback(() => setLegacyState(null), []);
+  const importLegacy = useCallback(async () => {
+    if (!legacyState || modeRef.current !== 'telegram') return;
+    const next = { ...legacyState, user: { ...legacyState.user!, plan: 'free' as const } };
+    pendingRef.current = next;
+    await flush();
+    replaceState(next);
+    setLegacyState(null);
+  }, [legacyState, flush, replaceState]);
+
+  const exportWorkspace = useCallback(() => {
+    const blob = new Blob([JSON.stringify(pendingRef.current || stateRef.current, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'bizbox-backup.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, []);
 
   const updateUser = useCallback((patch: Partial<UserProfile>) => {
     setState(s => s.user ? { ...s, user: { ...s.user, ...patch } } : s);
-  }, []);
+  }, [setState]);
 
   const updateBusiness = useCallback((patch: Partial<BusinessProfile>) => {
     setState(s => s.business ? { ...s, business: { ...s.business, ...patch } } : s);
-  }, []);
+  }, [setState]);
 
   const addTransaction = useCallback((t: Omit<Transaction, 'id'>) => {
     setState(s => ({ ...s, transactions: [{ ...t, id: uid('t') }, ...s.transactions] }));
-  }, []);
+  }, [setState]);
   const updateTransaction = useCallback((id: string, patch: Partial<Transaction>) => {
     setState(s => ({ ...s, transactions: s.transactions.map(t => t.id === id ? { ...t, ...patch } : t) }));
-  }, []);
+  }, [setState]);
   const deleteTransaction = useCallback((id: string) => {
     setState(s => ({ ...s, transactions: s.transactions.filter(t => t.id !== id) }));
-  }, []);
+  }, [setState]);
 
   const addDocument = useCallback((d: Omit<DocumentItem, 'id'>) => {
     setState(s => ({ ...s, documents: [{ ...d, id: uid('d') }, ...s.documents] }));
-  }, []);
+  }, [setState]);
   const updateDocument = useCallback((id: string, patch: Partial<DocumentItem>) => {
     setState(s => ({ ...s, documents: s.documents.map(d => d.id === id ? { ...d, ...patch } : d) }));
-  }, []);
+  }, [setState]);
   const deleteDocument = useCallback((id: string) => {
     setState(s => ({ ...s, documents: s.documents.filter(d => d.id !== id) }));
-  }, []);
+  }, [setState]);
 
   const addClient = useCallback((c: Omit<Client, 'id' | 'notes' | 'activities'>) => {
     setState(s => ({ ...s, clients: [{ ...c, id: uid('c'), notes: [], activities: [] }, ...s.clients] }));
-  }, []);
+  }, [setState]);
   const updateClient = useCallback((id: string, patch: Partial<Client>) => {
     setState(s => ({ ...s, clients: s.clients.map(c => c.id === id ? { ...c, ...patch } : c) }));
-  }, []);
+  }, [setState]);
   const deleteClient = useCallback((id: string) => {
     setState(s => ({ ...s, clients: s.clients.filter(c => c.id !== id) }));
-  }, []);
+  }, [setState]);
   const addClientNote = useCallback((clientId: string, text: string) => {
     setState(s => ({
       ...s,
@@ -195,7 +306,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? { ...c, notes: [{ id: uid('n'), text, date: new Date().toISOString() }, ...c.notes] }
         : c),
     }));
-  }, []);
+  }, [setState]);
   const addClientActivity = useCallback((clientId: string, type: Client['activities'][0]['type'], text: string) => {
     setState(s => ({
       ...s,
@@ -203,41 +314,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? { ...c, activities: [{ id: uid('a'), type, text, date: new Date().toISOString() }, ...c.activities], lastActivity: new Date().toISOString() }
         : c),
     }));
-  }, []);
+  }, [setState]);
 
   const addTask = useCallback((t: Omit<Task, 'id'>) => {
     setState(s => ({ ...s, tasks: [{ ...t, id: uid('tk') }, ...s.tasks] }));
-  }, []);
+  }, [setState]);
   const updateTask = useCallback((id: string, patch: Partial<Task>) => {
     setState(s => ({ ...s, tasks: s.tasks.map(t => t.id === id ? { ...t, ...patch } : t) }));
-  }, []);
+  }, [setState]);
   const deleteTask = useCallback((id: string) => {
     setState(s => ({ ...s, tasks: s.tasks.filter(t => t.id !== id) }));
-  }, []);
+  }, [setState]);
   const toggleTask = useCallback((id: string) => {
     setState(s => ({ ...s, tasks: s.tasks.map(t => t.id === id ? { ...t, completed: !t.completed, status: !t.completed ? 'done' : 'new' } : t) }));
-  }, []);
+  }, [setState]);
 
   const addEmployee = useCallback((e: Omit<Employee, 'id'>) => {
     setState(s => ({ ...s, employees: [...s.employees, { ...e, id: uid('e') }] }));
-  }, []);
+  }, [setState]);
   const updateEmployee = useCallback((id: string, patch: Partial<Employee>) => {
     setState(s => ({ ...s, employees: s.employees.map(e => e.id === id ? { ...e, ...patch } : e) }));
-  }, []);
+  }, [setState]);
   const deleteEmployee = useCallback((id: string) => {
     setState(s => ({ ...s, employees: s.employees.filter(e => e.id !== id) }));
-  }, []);
+  }, [setState]);
 
   const markNotificationRead = useCallback((id: string) => {
     setState(s => ({ ...s, notifications: s.notifications.map(n => n.id === id ? { ...n, read: true } : n) }));
-  }, []);
+  }, [setState]);
   const markAllNotificationsRead = useCallback(() => {
     setState(s => ({ ...s, notifications: s.notifications.map(n => ({ ...n, read: true })) }));
-  }, []);
+  }, [setState]);
 
   const setPlan = useCallback((plan: UserProfile['plan']) => {
     setState(s => s.user ? { ...s, user: { ...s.user, plan } } : s);
-  }, []);
+  }, [setState]);
 
   const addPayment = useCallback((p: Omit<PaymentRequest, 'id' | 'createdAt' | 'status'>): string => {
     const id = uid('pay');
@@ -246,11 +357,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       payments: [{ ...p, id, createdAt: new Date().toISOString(), status: 'awaiting_confirmation' }, ...s.payments],
     }));
     return id;
-  }, []);
+  }, [setState]);
 
   const updatePaymentStatus = useCallback((id: string, status: PaymentStatus) => {
     setState(s => ({ ...s, payments: s.payments.map(p => p.id === id ? { ...p, status } : p) }));
-  }, []);
+  }, [setState]);
 
   const confirmPayment = useCallback((id: string) => {
     setState(s => {
@@ -262,11 +373,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         user: s.user ? { ...s.user, plan: payment.plan } : s.user,
       };
     });
-  }, []);
+  }, [setState]);
 
   const rejectPayment = useCallback((id: string) => {
     setState(s => ({ ...s, payments: s.payments.map(p => p.id === id ? { ...p, status: 'rejected' } : p) }));
-  }, []);
+  }, [setState]);
 
   const applyReferralCode = useCallback((code: string) => {
     if (!code || code.trim().length === 0) {
@@ -281,18 +392,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { ok: false, message: 'Неверный промокод' };
   }, [setPlan]);
 
+
+
   const value: AppContextValue = {
-    state, auth, referral, login, logout, completeOnboarding, updateUser, updateBusiness,
+    state, auth, referral, bootStatus, bootError, syncStatus, syncError, legacyState,
+    startDemo, logout, reloadWorkspace, retrySave, importLegacy, dismissLegacy, exportWorkspace,
+    saveOnboardingDraft, completeOnboarding, updateUser, updateBusiness,
     addTransaction, updateTransaction, deleteTransaction,
     addDocument, updateDocument, deleteDocument,
     addClient, updateClient, deleteClient, addClientNote, addClientActivity,
     addTask, updateTask, deleteTask, toggleTask,
     addEmployee, updateEmployee, deleteEmployee,
     markNotificationRead, markAllNotificationsRead, setPlan,
-    addPayment, updatePaymentStatus, confirmPayment, rejectPayment,
-    applyReferralCode,
+    addPayment, updatePaymentStatus, confirmPayment, rejectPayment, applyReferralCode,
   };
-
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 

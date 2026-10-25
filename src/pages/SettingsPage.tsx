@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Briefcase, Bell, Shield, CreditCard, Save, LogOut, Check, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { User, Briefcase, Bell, Shield, CreditCard, Save, LogOut, Download, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import { useToast } from '@/store/ToastContext';
 import type { Page, PaymentRequest, PaymentStatus } from '@/types';
@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Input, Field, Select } from '@/components/ui/Input';
 import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/format';
+import { APP_VERSION } from '@/lib/telegram';
 
 const planNames: Record<string, string> = { free: 'FREE', business: 'BUSINESS', pro: 'PRO' };
 
@@ -24,7 +25,7 @@ const sections = [
 ];
 
 export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
-  const { state, updateUser, updateBusiness, logout, confirmPayment, rejectPayment } = useApp();
+  const { state, auth, updateUser, updateBusiness, logout, confirmPayment, rejectPayment, exportWorkspace } = useApp();
   const toast = useToast();
   const [section, setSection] = useState('profile');
 
@@ -36,7 +37,7 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
         {/* Section nav */}
         <div className="lg:w-56 shrink-0">
           <div className="flex lg:flex-col gap-1 overflow-x-auto no-scrollbar">
-            {sections.map(s => {
+            {sections.filter(s => s.id !== 'admin' || auth.mode === 'demo').map(s => {
               const Icon = s.icon;
               return (
                 <button key={s.id} onClick={() => setSection(s.id)}
@@ -58,9 +59,10 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
           {section === 'notifications' && <NotificationsSection />}
           {section === 'security' && <SecuritySection />}
           {section === 'subscription' && <SubscriptionSection onNavigate={onNavigate} />}
-          {section === 'admin' && <AdminSection />}
+          {section === 'admin' && auth.mode === 'demo' && <AdminSection />}
         </div>
       </div>
+      <p className="text-[11px] text-white/25 text-center">BizBox · {APP_VERSION}</p>
     </div>
   );
 
@@ -161,41 +163,27 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
   }
 
   function SecuritySection() {
-    const [current, setCurrent] = useState('');
-    const [newPass, setNewPass] = useState('');
-    const [confirm, setConfirm] = useState('');
-    const [twoFA, setTwoFA] = useState(false);
-
-    const handleChangePass = () => {
-      if (!current || !newPass) { toast.error('Заполните поля', 'Текущий и новый пароль обязательны'); return; }
-      if (newPass !== confirm) { toast.error('Пароли не совпадают', 'Новый пароль и подтверждение должны быть одинаковыми'); return; }
-      toast.success('Пароль изменён', 'Используйте новый пароль при следующем входе.');
-      setCurrent(''); setNewPass(''); setConfirm('');
-    };
-
     return (
       <div className="space-y-6">
         <Card className="p-5 sm:p-6">
-          <h3 className="text-base font-semibold text-white mb-5">Смена пароля</h3>
-          <div className="space-y-4">
-            <Field label="Текущий пароль"><Input type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="••••••••" /></Field>
-            <Field label="Новый пароль"><Input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="••••••••" /></Field>
-            <Field label="Подтвердите пароль"><Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="••••••••" /></Field>
-            <Button onClick={handleChangePass}><Save className="w-4 h-4" /> Изменить пароль</Button>
+          <div className="flex items-center gap-3 mb-4">
+            <Shield className="w-6 h-6 text-accent-400" />
+            <h3 className="text-base font-semibold text-white">Вход через Telegram</h3>
           </div>
+          <p className="text-sm text-white/60 leading-relaxed">
+            {auth.mode === 'telegram'
+              ? 'BizBox открывает рабочее пространство твоего аккаунта Telegram. После сохранения данные доступны при следующем входе через этого же бота.'
+              : 'Сейчас открыт демо-режим. Для своего бизнеса открой BizBox в Telegram: там данные сохраняются в твоём аккаунте.'}
+          </p>
+          <p className="text-sm text-white/50 leading-relaxed mt-4">
+            Пароль Telegram и двухэтапную проверку можно настроить в самом Telegram: «Настройки» → «Конфиденциальность». Активные сеансы — в разделе «Устройства».
+          </p>
         </Card>
 
         <Card className="p-5 sm:p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-white">Двухфакторная аутентификация</h3>
-              <p className="text-sm text-white/40 mt-1">Дополнительная защита вашего аккаунта</p>
-            </div>
-            <button onClick={() => { setTwoFA(v => !v); toast.success(twoFA ? '2FA отключена' : '2FA включена'); }}
-              className={cn('relative w-11 h-6 rounded-full transition-colors', twoFA ? 'bg-accent-500' : 'bg-bg-raised')}>
-              <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform', twoFA ? 'translate-x-5' : 'translate-x-0.5')} />
-            </button>
-          </div>
+          <h3 className="text-base font-semibold text-white">Копия данных</h3>
+          <p className="text-sm text-white/50 leading-relaxed mt-2 mb-5">Скачай профиль, операции, клиентов и задачи одним файлом JSON. В копию попадут и изменения, которые ещё ожидают сохранения.</p>
+          <Button onClick={exportWorkspace}><Download className="w-4 h-4" /> Скачать копию</Button>
         </Card>
       </div>
     );
@@ -324,4 +312,4 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
     );
   }
 }
-export default SubscriptionPage;
+export default SettingsPage;

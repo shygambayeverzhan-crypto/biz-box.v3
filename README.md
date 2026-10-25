@@ -60,4 +60,6 @@ Before release:
 
 The automated suite uses an in-memory mock of the documented Telegram callback API. It covers reopen, draft steps, multiple chunks/emoji, errors, timeouts, invalid data, size bounds, revision conflicts, interrupted writes and generation cleanup. Passing mock tests is not evidence of a live Telegram session test.
 
+For isolated browser regression checks, run `npx vite --mode integration`. The visibly marked test bridge uses sessionStorage as fake cloud storage, forces localStorage to throw, and offers account switching and simulated read/write failures. Use fictional data only. The normal production build excludes this fixture and checks the output for fixture markers. Never publish an integration build as production.
+
 Rollback: redeploy the prior Vercel version. CloudStorage keys are versioned and remain available; the old app will not understand them. Do not delete cloud keys or run a database reset to fix a loading problem.

@@ -40,10 +40,12 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
   const [opModalOpen, setOpModalOpen] = useState(false);
 
   const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const todayTasks = state.tasks.filter(t => t.dueDate === today && !t.completed);
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const previousMonthDate = new Date(currentYear, currentMonth - 1, 1);
   const previousMonthKey = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
   const completedTransactions = useMemo(
@@ -72,13 +74,13 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
     : `${revenueChange > 0 ? '+' : ''}${revenueChange.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}% к прошлому месяцу`;
 
   const revenueData = useMemo(() => Array.from({ length: 6 }, (_, index) => {
-    const month = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+    const month = new Date(currentYear, currentMonth - 5 + index, 1);
     const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
     const value = completedTransactions
       .filter(t => t.type === 'income' && t.date.slice(0, 7) === monthKey)
       .reduce((sum, t) => sum + t.amount, 0);
     return { label: month.toLocaleDateString('ru-RU', { month: 'short' }), value };
-  }), [completedTransactions, now.getFullYear(), now.getMonth()]);
+  }), [completedTransactions, currentYear, currentMonth]);
 
   const userName = state.user?.name || 'Ержан';
 

@@ -231,11 +231,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [flush]);
 
   const saveOnboardingDraft = useCallback((business: BusinessProfile, step: number) => {
-    if (stateRef.current.onboardingComplete || completingRef.current) return;
+    if (stateRef.current.onboardingComplete || completingRef.current || pendingRef.current?.onboardingComplete) return;
     setState(previous => ({ ...previous, business, onboardingStep: step }));
   }, [setState]);
 
-  const retrySave = useCallback(async () => { await flush(); }, [flush]);
+  const retrySave = useCallback(async () => {
+    const retryingCompletion = Boolean(pendingRef.current?.onboardingComplete && !stateRef.current.onboardingComplete);
+    if (retryingCompletion) completingRef.current = true;
+    try { await flush(); } finally {
+      if (retryingCompletion) completingRef.current = false;
+    }
+  }, [flush]);
   const dismissLegacy = useCallback(() => setLegacyState(null), []);
   const importLegacy = useCallback(async () => {
     if (!legacyState || modeRef.current !== 'telegram') return;

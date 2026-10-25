@@ -22,11 +22,17 @@ declare global {
 
 export function getTelegram(): TelegramWebApp | null {
   const app = window.Telegram?.WebApp;
-  return app?.initData && app.platform !== 'unknown' ? app : null;
+  // Keyboard/inline-mode launches may legitimately have empty initData. This
+  // identifies a client bridge, not authenticated server identity; CloudStorage
+  // performs its own per-bot/per-user isolation inside Telegram.
+  return app && typeof app.platform === 'string' && app.platform !== '' && app.platform !== 'unknown' ? app : null;
 }
 
 export function isTelegramLaunch(): boolean {
-  return Boolean(getTelegram()) || new URLSearchParams(window.location.hash.slice(1)).has('tgWebAppData');
+  if (getTelegram()) return true;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const platform = params.get('tgWebAppPlatform');
+  return params.has('tgWebAppData') || Boolean(platform && platform !== 'unknown');
 }
 
 // Display hints only. CloudStorage itself is isolated by Telegram per bot/user.

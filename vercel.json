@@ -1,14 +1,1 @@
-{
-  "buildCommand": "npm run check && npx vite build --mode integration",
-  "headers": [
-    {
-      "source": "/",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, must-revalidate"
-        }
-      ]
-    }
-  ]
-}
+{"buildCommand":"npm run check && npx vite build --mode integration"}

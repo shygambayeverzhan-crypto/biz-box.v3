@@ -39,20 +39,46 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
   const toast = useToast();
   const [opModalOpen, setOpModalOpen] = useState(false);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const todayTasks = state.tasks.filter(t => t.dueDate === today && !t.completed);
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const previousMonthKey = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-  const income = useMemo(() => state.transactions.filter(t => t.type === 'income' && t.status === 'completed').reduce((s, t) => s + t.amount, 0), [state.transactions]);
-  const expenses = useMemo(() => state.transactions.filter(t => t.type === 'expense' && t.status === 'completed').reduce((s, t) => s + t.amount, 0), [state.transactions]);
+  const completedTransactions = useMemo(
+    () => state.transactions.filter(t => t.status === 'completed'),
+    [state.transactions],
+  );
+  const currentMonthTransactions = useMemo(
+    () => completedTransactions.filter(t => t.date.slice(0, 7) === currentMonthKey),
+    [completedTransactions, currentMonthKey],
+  );
+  const previousMonthTransactions = useMemo(
+    () => completedTransactions.filter(t => t.date.slice(0, 7) === previousMonthKey),
+    [completedTransactions, previousMonthKey],
+  );
+  const sumType = (transactions: typeof completedTransactions, type: 'income' | 'expense') =>
+    transactions.filter(t => t.type === type).reduce((sum, t) => sum + t.amount, 0);
+  const income = sumType(currentMonthTransactions, 'income');
+  const expenses = sumType(currentMonthTransactions, 'expense');
+  const previousMonthIncome = sumType(previousMonthTransactions, 'income');
   const profit = income - expenses;
+  const revenueChange = previousMonthIncome === 0
+    ? null
+    : ((income - previousMonthIncome) / previousMonthIncome) * 100;
+  const revenueTrendLabel = revenueChange === null
+    ? (income > 0 ? 'Появилась выручка' : 'Нет данных для сравнения')
+    : `${revenueChange > 0 ? '+' : ''}${revenueChange.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}% к прошлому месяцу`;
 
-  const revenueData = useMemo(() => {
-    const months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен'];
-    return months.map((label, i) => ({
-      label,
-      value: Math.round(1500000 + i * 120000 + Math.sin(i) * 180000 + (i === 8 ? income - 2000000 : 0)),
-    }));
-  }, [income]);
+  const revenueData = useMemo(() => Array.from({ length: 6 }, (_, index) => {
+    const month = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+    const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+    const value = completedTransactions
+      .filter(t => t.type === 'income' && t.date.slice(0, 7) === monthKey)
+      .reduce((sum, t) => sum + t.amount, 0);
+    return { label: month.toLocaleDateString('ru-RU', { month: 'short' }), value };
+  }), [completedTransactions, now.getFullYear(), now.getMonth()]);
 
   const userName = state.user?.name || 'Ержан';
 
@@ -84,9 +110,12 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
               <AnimatedNumber value={income} format={formatCurrency} className="text-3xl sm:text-4xl font-bold text-white tabular-nums" />
             </div>
             <div className="flex items-center gap-1.5 mt-3">
-              <TrendingUp className="w-4 h-4 text-success-400" />
-              <span className="text-sm font-medium text-success-400">+18,4%</span>
-              <span className="text-xs text-white/40">к прошлому месяцу</span>
+              {revenueChange !== null && revenueChange < 0
+                ? <TrendingDown className="w-4 h-4 text-danger-400" />
+                : <TrendingUp className="w-4 h-4 text-success-400" />}
+              <span className={cn('text-sm font-medium', revenueChange !== null && revenueChange < 0 ? 'text-danger-400' : 'text-success-400')}>
+                {revenueTrendLabel}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-3 mt-6">
               <div className="bg-bg-base rounded-xl p-3 border border-border">
@@ -107,9 +136,9 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-        <KpiCard label="Расходы" value={expenses} format={formatCurrency} icon={<TrendingDown className="w-[18px] h-[18px]" />} accent="text-danger-400 bg-danger-500/10" trend={{ value: '-5,2%', positive: false }} onClick={() => onNavigate('finance')} />
-        <KpiCard label="Прибыль" value={profit} format={formatCurrency} icon={<Wallet className="w-[18px] h-[18px]" />} accent="text-success-400 bg-success-500/10" trend={{ value: '+24,1%', positive: true }} onClick={() => onNavigate('finance')} />
-        <KpiCard label="Клиенты" value={state.clients.length} format={n => String(Math.round(n))} icon={<Users className="w-[18px] h-[18px]" />} accent="text-accent-400 bg-accent-500/10" trend={{ value: '+12', positive: true }} onClick={() => onNavigate('clients')} />
+        <KpiCard label="Расходы" value={expenses} format={formatCurrency} icon={<TrendingDown className="w-[18px] h-[18px]" />} accent="text-danger-400 bg-danger-500/10" onClick={() => onNavigate('finance')} />
+        <KpiCard label="Прибыль" value={profit} format={formatCurrency} icon={<Wallet className="w-[18px] h-[18px]" />} accent="text-success-400 bg-success-500/10" onClick={() => onNavigate('finance')} />
+        <KpiCard label="Клиенты" value={state.clients.length} format={n => String(Math.round(n))} icon={<Users className="w-[18px] h-[18px]" />} accent="text-accent-400 bg-accent-500/10" onClick={() => onNavigate('clients')} />
         <KpiCard label="Задачи" value={state.tasks.filter(t => !t.completed).length} format={n => String(Math.round(n))} icon={<CheckSquare className="w-[18px] h-[18px]" />} accent="text-warning-400 bg-warning-500/10" onClick={() => onNavigate('tasks')} />
         <KpiCard label="Сотрудники" value={state.employees.length} format={n => String(Math.round(n))} icon={<Users className="w-[18px] h-[18px]" />} accent="text-accent-300 bg-accent-500/10" onClick={() => onNavigate('employees')} />
       </div>

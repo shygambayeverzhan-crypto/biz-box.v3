@@ -126,6 +126,21 @@ test('incomplete completed profiles and oversized workspaces fail before writing
   assert.equal(storage.values.size, 0);
 });
 
+test('draft steps are bounded and completed workspaces require a selected module', async () => {
+  const storage = new MemoryStorage();
+  for (const step of [-1, 3, 0.5, '1']) {
+    const state = { ...baseState(), onboardingComplete: false, onboardingStep: step };
+    await rejectsCode(saveWorkspace(storage, state, null), 'invalid_state');
+  }
+  const noModules = baseState();
+  noModules.business.modules = [];
+  await rejectsCode(saveWorkspace(storage, noModules, null), 'invalid_state');
+  noModules.onboardingComplete = false;
+  noModules.onboardingStep = 1;
+  const revision = await saveWorkspace(storage, noModules, null);
+  assert.deepEqual(await loadWorkspace(storage), { state: noModules, revision });
+});
+
 test('a known revision mismatch rejects before any write', async () => {
   const storage = new MemoryStorage();
   const revision = await saveWorkspace(storage, baseState(), null);

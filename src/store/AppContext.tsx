@@ -87,6 +87,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const revisionRef = useRef<string | null>(null);
   const pendingRef = useRef<AppState | null>(null);
   const savingRef = useRef<Promise<void> | null>(null);
+  const completingRef = useRef(false);
   const bootRun = useRef(0);
   const cacheKey = useRef<string | null>(null);
 
@@ -103,6 +104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const flush = useCallback((): Promise<void> => {
     if (savingRef.current) return savingRef.current;
     if (!pendingRef.current || !storageRef.current) return Promise.resolve();
+    let succeeded = false;
     const task = (async () => {
       setSyncStatus('saving');
       setSyncError('');
@@ -112,7 +114,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pendingRef.current = null;
         try {
           revisionRef.current = await saveWorkspace(storageRef.current!, next, revisionRef.current);
-          cacheLocalCopy(next);
+          cacheLocalCopy(pendingRef.current || next);
+          if (next.onboardingComplete && !stateRef.current.onboardingComplete) {
+            replaceState(next);
+            setLegacyState(null);
+          }
         } catch (error) {
           pendingRef.current = pendingRef.current || next;
           setSyncStatus('error');
@@ -122,10 +128,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       setSyncStatus('saved');
       getTelegram()?.disableClosingConfirmation?.();
+      succeeded = true;
     })();
-    savingRef.current = task.finally(() => { savingRef.current = null; });
+    savingRef.current = task.finally(() => {
+      savingRef.current = null;
+      if (succeeded && pendingRef.current) return flush();
+    });
     return savingRef.current;
-  }, [cacheLocalCopy]);
+  }, [cacheLocalCopy, replaceState]);
 
   const setState = useCallback((update: SetStateAction<AppState>) => {
     const next = typeof update === 'function' ? update(stateRef.current) : update;
@@ -211,14 +221,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const completeOnboarding = useCallback(async (business: BusinessProfile) => {
     const next = { ...stateRef.current, business, onboardingComplete: true, onboardingStep: 2 };
     if (modeRef.current !== 'telegram' || !storageRef.current) throw new Error('Откройте BizBox в Telegram.');
+    completingRef.current = true;
     pendingRef.current = next;
-    await flush(); // Do not leave onboarding until Telegram acknowledges the committed snapshot.
-    replaceState(next);
-    setLegacyState(null);
-  }, [flush, replaceState]);
+    try {
+      await flush(); // Do not leave onboarding until Telegram acknowledges the committed snapshot.
+    } finally {
+      completingRef.current = false;
+    }
+  }, [flush]);
 
   const saveOnboardingDraft = useCallback((business: BusinessProfile, step: number) => {
-    if (stateRef.current.onboardingComplete) return;
+    if (stateRef.current.onboardingComplete || completingRef.current) return;
     setState(previous => ({ ...previous, business, onboardingStep: step }));
   }, [setState]);
 

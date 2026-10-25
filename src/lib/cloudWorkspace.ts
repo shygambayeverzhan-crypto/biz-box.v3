@@ -44,11 +44,12 @@ const rows = (value: unknown, check: (row: Record<string, unknown>) => boolean) 
 /** Validate before saving and after loading so bad storage never becomes a new account. */
 export function isWorkspaceState(value: unknown): value is AppState {
   if (!record(value) || typeof value.onboardingComplete !== 'boolean') return false;
+  if (value.onboardingStep !== undefined && (!Number.isInteger(value.onboardingStep) || Number(value.onboardingStep) < 0 || Number(value.onboardingStep) > 2)) return false;
   const user = value.user;
   if (user !== null && !(record(user) && fields(user, ['name', 'email']) && oneOf(user.plan, ['free', 'business', 'pro']))) return false;
   const business = value.business;
   if (business !== null && !(record(business) && fields(business, ['name', 'industry', 'city', 'employeesCount']) && Array.isArray(business.modules) && business.modules.every(item => typeof item === 'string'))) return false;
-  if (value.onboardingComplete && (!record(user) || !record(business) || !['name', 'industry', 'city', 'employeesCount'].every(key => typeof business[key] === 'string' && business[key].trim().length > 0))) return false;
+  if (value.onboardingComplete && (!record(user) || !record(business) || !Array.isArray(business.modules) || business.modules.length === 0 || !['name', 'industry', 'city', 'employeesCount'].every(key => typeof business[key] === 'string' && business[key].trim().length > 0))) return false;
   return rows(value.transactions, r => fields(r, ['id', 'category', 'description', 'date']) && numbers(r, ['amount']) && oneOf(r.type, ['income', 'expense', 'transfer']) && oneOf(r.status, ['completed', 'pending', 'failed']) && optionalStrings(r, ['account']))
     && rows(value.documents, r => fields(r, ['id', 'name', 'client', 'date', 'number']) && numbers(r, ['amount']) && oneOf(r.type, ['contract', 'invoice', 'act', 'proposal', 'template']) && oneOf(r.status, ['draft', 'signing', 'signed', 'paid']) && optionalStrings(r, ['content']))
     && rows(value.clients, r => fields(r, ['id', 'name', 'company', 'email', 'phone', 'lastActivity', 'avatarColor']) && numbers(r, ['dealValue']) && oneOf(r.status, ['active', 'potential', 'archived']) && rows(r.notes, n => fields(n, ['id', 'text', 'date'])) && rows(r.activities, a => fields(a, ['id', 'text', 'date']) && oneOf(a.type, ['call', 'meeting', 'email', 'deal', 'payment'])))

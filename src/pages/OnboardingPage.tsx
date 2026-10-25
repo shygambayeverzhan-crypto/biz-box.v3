@@ -121,7 +121,15 @@ export function OnboardingPage() {
                       <Input value={business.city} onChange={e => setBusiness({ ...business, city: e.target.value })} placeholder="Астана" maxLength={80} />
                     </Field>
                     <Field label="Сотрудников" required>
-                      <Select value={business.employeesCount} onChange={e => setBusiness({ .       <>
+                      <Select value={business.employeesCount} onChange={e => setBusiness({ ...business, employeesCount: e.target.value })} options={employeeOptions} placeholder="Выберите" />
+                    </Field>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {step === 1 && (
+              <>
                 <h2 className="text-xl font-bold text-white">Что хотите контролировать?</h2>
                 <p className="text-sm text-white/50 mt-1 mb-6">Выберите модули для вашего бизнеса. Можно изменить позже.</p>
                 <div className="space-y-2.5">
@@ -130,13 +138,21 @@ export function OnboardingPage() {
                     const Icon = m.icon;
                     return (
                       <button
-                               selected ? 'bg-accent-500/10 border-accent-500/40' : 'bg-bg-base border-border hover:border-border-strong',
+                        key={m.key}
+                        onClick={() => toggleModule(m.key)}
+                        className={cn(
+                          'w-full flex items-center gap-3.5 p-4 rounded-xl border transition-all duration-200 text-left',
+                          selected ? 'bg-accent-500/10 border-accent-500/40' : 'bg-bg-base border-border hover:border-border-strong',
                         )}
                       >
                         <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors', selected ? 'bg-accent-500/20 text-accent-400' : 'bg-white/5 text-white/40')}>
                           <Icon className="w-5 h-5" />
                         </div>
-                        <div classNamdiv className={cn('w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all', selected ? 'bg-accent-500 border-accent-500' : 'border-border-strong')}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white">{m.label}</p>
+                          <p className="text-2xs text-white/40 mt-0.5">{m.desc}</p>
+                        </div>
+                        <div className={cn('w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all', selected ? 'bg-accent-500 border-accent-500' : 'border-border-strong')}>
                           {selected && <Check className="w-3.5 h-3.5 text-white" />}
                         </div>
                       </button>

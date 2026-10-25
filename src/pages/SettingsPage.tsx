@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Briefcase, Bell, Shield, CreditCard, Save, LogOut, Check, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { User, Briefcase, Bell, Shield, CreditCard, Save, LogOut, Download, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import { useToast } from '@/store/ToastContext';
 import type { Page, PaymentRequest, PaymentStatus } from '@/types';
@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Input, Field, Select } from '@/components/ui/Input';
 import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/format';
+import { APP_VERSION } from '@/lib/telegram';
 
 const planNames: Record<string, string> = { free: 'FREE', business: 'BUSINESS', pro: 'PRO' };
 
@@ -19,7 +20,25 @@ const sections = [
   { id: 'business', label: 'Бизнес', icon: Briefcase },
   { id: 'notifications', label: 'Уведомления', icon: Bell },
   { id: 'security', label: 'Безопасность', icon: Shield },
-  { id: 'subscription', label: 'Подписка', icon: CreditC
+  { id: 'subscription', label: 'Подписка', icon: CreditCard },
+  { id: 'admin', label: 'Администрирование', icon: ShieldCheck },
+];
+
+export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
+  const { state, auth, updateUser, updateBusiness, logout, confirmPayment, rejectPayment, exportWorkspace } = useApp();
+  const toast = useToast();
+  const [section, setSection] = useState('profile');
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Настройки" subtitle="Управление аккаунтом и бизнесом" />
+
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Section nav */}
+        <div className="lg:w-56 shrink-0">
+          <div className="flex lg:flex-col gap-1 overflow-x-auto no-scrollbar">
+            {sections.filter(s => s.id !== 'admin' || auth.mode === 'demo').map(s => {
+              const Icon = s.icon;
               return (
                 <button key={s.id} onClick={() => setSection(s.id)}
                   className={cn('flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap',
@@ -31,13 +50,45 @@ const sections = [
             <button onClick={logout} className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-danger-400 hover:bg-danger-500/10 transition-all whitespace-nowrap">
               <LogOut className="w-4 h-4" /> Выйти
             </button>
-       атель'} color="accent" size="lg" />
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {section === 'profile' && <ProfileSection />}
+          {section === 'business' && <BusinessSection />}
+          {section === 'notifications' && <NotificationsSection />}
+          {section === 'security' && <SecuritySection />}
+          {section === 'subscription' && <SubscriptionSection onNavigate={onNavigate} />}
+          {section === 'admin' && auth.mode === 'demo' && <AdminSection />}
+        </div>
+      </div>
+      <p className="text-[11px] text-white/25 text-center">BizBox · {APP_VERSION}</p>
+    </div>
+  );
+
+  function ProfileSection() {
+    const [name, setName] = useState(state.user?.name || '');
+    const [email, setEmail] = useState(state.user?.email || '');
+
+    const handleSave = () => {
+      updateUser({ name, email });
+      toast.success('Профиль обновлён');
+    };
+
+    return (
+      <Card className="p-5 sm:p-6">
+        <h3 className="text-base font-semibold text-white mb-5">Профиль</h3>
+        <div className="flex items-center gap-4 mb-6">
+          <Avatar name={name || 'Пользователь'} color="accent" size="lg" />
           <div>
             <p className="text-sm font-medium text-white">{name || '—'}</p>
             <p className="text-xs text-white/40">{email}</p>
           </div>
         </div>
-        <div classNamtton onClick={handleSave}><Save className="w-4 h-4" /> Сохранить</Button>
+        <div className="space-y-4">
+          <Field label="Имя"><Input value={name} onChange={e => setName(e.target.value)} /></Field>
+          <Field label="Email"><Input type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
+          <Button onClick={handleSave}><Save className="w-4 h-4" /> Сохранить</Button>
         </div>
       </Card>
     );
@@ -60,7 +111,11 @@ const sections = [
         <div className="space-y-4">
           <Field label="Название бизнеса"><Input value={name} onChange={e => setName(e.target.value)} /></Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Сфера"><Input valaceholder="Выберите" />
+            <Field label="Сфера"><Input value={industry} onChange={e => setIndustry(e.target.value)} /></Field>
+            <Field label="Город"><Input value={city} onChange={e => setCity(e.target.value)} /></Field>
+          </div>
+          <Field label="Количество сотрудников">
+            <Select value={employees} onChange={e => setEmployees(e.target.value)} options={[{ value: '1', label: 'Только я' }, { value: '2-5', label: '2–5' }, { value: '6-15', label: '6–15' }, { value: '16-50', label: '16–50' }, { value: '50+', label: '50+' }]} placeholder="Выберите" />
           </Field>
           <Button onClick={handleSave}><Save className="w-4 h-4" /> Сохранить</Button>
         </div>
@@ -75,7 +130,20 @@ const sections = [
 
     const items = [
       { key: 'payments', label: 'Платежи', desc: 'Уведомления о счетах и оплатах' },
-      { key: 'tasks', label: 'Задачи', h3 className="text-base font-semibold text-white mb-5">Уведомления</h3>
+      { key: 'tasks', label: 'Задачи', desc: 'Напоминания о дедлайнах' },
+      { key: 'clients', label: 'Клиенты', desc: 'Новые клиенты и активности' },
+      { key: 'documents', label: 'Документы', desc: 'Статусы документов' },
+      { key: 'marketing', label: 'Маркетинг', desc: 'Новости и акции BIZBOX' },
+    ];
+
+    const toggle = (key: string) => {
+      setSettings(s => ({ ...s, [key]: !s[key as keyof typeof s] }));
+      toast.success('Настройки сохранены');
+    };
+
+    return (
+      <Card className="p-5 sm:p-6">
+        <h3 className="text-base font-semibold text-white mb-5">Уведомления</h3>
         <div className="space-y-1">
           {items.map(item => (
             <div key={item.key} className="flex items-center justify-between py-3.5 border-b border-border/subtle last:border-0">
@@ -95,38 +163,28 @@ const sections = [
   }
 
   function SecuritySection() {
-    const [current, setCurrent] = useState('');
-    const [newPass, setNewPass] = useState('');
-    const [confirm, setConfirm] = useState('');
-    const [twoFA, setTwoFA] = useState(false);
-
-    const handleChangePass = () => {
-      if (!current || !newPass) { toast.error('Заполните поля', 'Текущий и новый пароль обязательны'); return; }
-      if (newPass !== confirm) { toast.error('Пароли не совпадают', 'Новый пароль и подтверждение должны быть одинаковыми'); return; }
-      toast.success('Пароль изменён', 'Используйте новый пароль при следующем входе.');
-      setCurrent(''); setNewPass(''); setConfirm('');
-    };
-
     return (
       <div className="space-y-6">
         <Card className="p-5 sm:p-6">
-          <h3 className="text-base font-semibold text-white mb-5">Смена пароля</h3>
-          <div className="space-y-4">
-            <Field label="Текущий пароль"><Input type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="••••••••" /></Field>
-            <Field label="Новый пароль"><Input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="••••••••" /></Field>
-            <Field label="Подтвердите пароль"><Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="••••••••" /></Field>
-            <Button onClick={handleChangePass}><Save className="w-4 h-4" /> Изменить пароль</Button>
+          <div className="flex items-center gap-3 mb-4">
+            <Shield className="w-6 h-6 text-accent-400" />
+            <h3 className="text-base font-semibold text-white">Вход через Telegram</h3>
           </div>
+          <p className="text-sm text-white/60 leading-relaxed">
+            {auth.mode === 'telegram'
+              ? 'BizBox открывает рабочее пространство твоего аккаунта Telegram. После сохранения данные доступны при следующем входе через этого же бота.'
+              : 'Сейчас открыт демо-режим. Для своего бизнеса открой BizBox в Telegram: там данные сохраняются в твоём аккаунте.'}
+          </p>
+          <p className="text-sm text-white/50 leading-relaxed mt-4">
+            Пароль Telegram и двухэтапную проверку можно настроить в самом Telegram: «Настройки» → «Конфиденциальность». Активные сеансы — в разделе «Устройства».
+          </p>
         </Card>
 
         <Card className="p-5 sm:p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-white">Двухфакторная аутентификация</h3>
-              <p className="text-sm text-white/40 mt-1">Дополнительная защита вашего аккаунта</p>
-            </div>
-            <button onClick={() => { setTwoFA(v => !v); toast.success(twoFA ? '2FA отключена' : '2FA включена'); }}
-              className={cn('relative w-11 h-6 rounded-full transition-c </Card>
+          <h3 className="text-base font-semibold text-white">Копия данных</h3>
+          <p className="text-sm text-white/50 leading-relaxed mt-2 mb-5">Скачай профиль, операции, клиентов и задачи одним файлом JSON. В копию попадут и изменения, которые ещё ожидают сохранения.</p>
+          <Button onClick={exportWorkspace}><Download className="w-4 h-4" /> Скачать копию</Button>
+        </Card>
       </div>
     );
   }

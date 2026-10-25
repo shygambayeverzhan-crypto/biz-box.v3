@@ -47,6 +47,7 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const previousMonthDate = new Date(currentYear, currentMonth - 1, 1);
   const previousMonthKey = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const previousPeriodCutoff = String(now.getDate()).padStart(2, '0');
 
   const completedTransactions = useMemo(
     () => state.transactions.filter(t => t.status === 'completed'),
@@ -57,21 +58,21 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
     [completedTransactions, currentMonthKey],
   );
   const previousMonthTransactions = useMemo(
-    () => completedTransactions.filter(t => t.date.slice(0, 7) === previousMonthKey),
-    [completedTransactions, previousMonthKey],
+    () => completedTransactions.filter(t => t.date.slice(0, 7) === previousMonthKey && t.date.slice(8, 10) <= previousPeriodCutoff),
+    [completedTransactions, previousMonthKey, previousPeriodCutoff],
   );
   const sumType = (transactions: typeof completedTransactions, type: 'income' | 'expense') =>
     transactions.filter(t => t.type === type).reduce((sum, t) => sum + t.amount, 0);
   const income = sumType(currentMonthTransactions, 'income');
   const expenses = sumType(currentMonthTransactions, 'expense');
-  const previousMonthIncome = sumType(previousMonthTransactions, 'income');
+  const previousPeriodIncome = sumType(previousMonthTransactions, 'income');
   const profit = income - expenses;
-  const revenueChange = previousMonthIncome === 0
+  const revenueChange = previousPeriodIncome === 0
     ? null
-    : ((income - previousMonthIncome) / previousMonthIncome) * 100;
+    : ((income - previousPeriodIncome) / previousPeriodIncome) * 100;
   const revenueTrendLabel = revenueChange === null
     ? (income > 0 ? 'Появилась выручка' : 'Нет данных для сравнения')
-    : `${revenueChange > 0 ? '+' : ''}${revenueChange.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}% к прошлому месяцу`;
+    : `${revenueChange > 0 ? '+' : ''}${revenueChange.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}% к этому дню прошлого месяца`;
 
   const revenueData = useMemo(() => Array.from({ length: 6 }, (_, index) => {
     const month = new Date(currentYear, currentMonth - 5 + index, 1);

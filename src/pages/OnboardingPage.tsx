@@ -34,9 +34,10 @@ interface OnboardingDraft {
   business: BusinessProfile;
 }
 
-function loadOnboardingDraft(): OnboardingDraft | null {
+function loadOnboardingDraft(userEmail?: string): OnboardingDraft | null {
+  const storageKey = userEmail ? `${ONBOARDING_DRAFT_KEY}_${encodeURIComponent(userEmail)}` : ONBOARDING_DRAFT_KEY;
   try {
-    const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const draft = JSON.parse(raw) as OnboardingDraft;
     if (
@@ -67,7 +68,8 @@ const modules = [
 export function OnboardingPage() {
   const { completeOnboarding, state } = useApp();
   const toast = useToast();
-  const [initialDraft] = useState(loadOnboardingDraft);
+  const draftStorageKey = state.user?.email ? `${ONBOARDING_DRAFT_KEY}_${encodeURIComponent(state.user.email)}` : ONBOARDING_DRAFT_KEY;
+  const [initialDraft] = useState(() => loadOnboardingDraft(state.user?.email));
   const [step, setStep] = useState(initialDraft?.step ?? 0);
   const [business, setBusiness] = useState<BusinessProfile>(initialDraft?.business ?? {
     name: '',
@@ -81,11 +83,11 @@ export function OnboardingPage() {
   useEffect(() => {
     if (completedRef.current) return;
     try {
-      localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify({ step, business }));
+      localStorage.setItem(draftStorageKey, JSON.stringify({ step, business }));
     } catch {
       // Continue onboarding even if browser storage is unavailable.
     }
-  }, [step, business]);
+  }, [step, business, draftStorageKey]);
 
   const toggleModule = (key: string) => {
     setBusiness(b => ({
@@ -105,7 +107,7 @@ export function OnboardingPage() {
     else {
       completedRef.current = true;
       try {
-        localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+        localStorage.removeItem(draftStorageKey);
       } catch {
         // The completed profile is saved by AppContext.
       }

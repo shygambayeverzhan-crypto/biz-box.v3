@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, ArrowRight, ArrowLeft, Wallet, FileText, Users, CheckSquare, UserCog, PartyPopper } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import { useToast } from '@/store/ToastContext';
@@ -27,6 +27,35 @@ const employeeOptions = [
   { value: '50+', label: 'Более 50' },
 ];
 
+const ONBOARDING_DRAFT_KEY = 'bizbox_onboarding_draft_v1';
+
+interface OnboardingDraft {
+  step: number;
+  business: BusinessProfile;
+}
+
+function loadOnboardingDraft(): OnboardingDraft | null {
+  try {
+    const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as OnboardingDraft;
+    if (
+      !Number.isInteger(draft.step) ||
+      draft.step < 0 ||
+      draft.step > 2 ||
+      !draft.business ||
+      typeof draft.business.name !== 'string' ||
+      typeof draft.business.industry !== 'string' ||
+      typeof draft.business.city !== 'string' ||
+      typeof draft.business.employeesCount !== 'string' ||
+      !Array.isArray(draft.business.modules)
+    ) return null;
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
 const modules = [
   { key: 'finance', label: 'Финансы', icon: Wallet, desc: 'Учёт доходов и расходов' },
   { key: 'documents', label: 'Документы', icon: FileText, desc: 'Договоры, счета, акты' },
@@ -38,14 +67,25 @@ const modules = [
 export function OnboardingPage() {
   const { completeOnboarding, state } = useApp();
   const toast = useToast();
-  const [step, setStep] = useState(0);
-  const [business, setBusiness] = useState<BusinessProfile>({
+  const [initialDraft] = useState(loadOnboardingDraft);
+  const [step, setStep] = useState(initialDraft?.step ?? 0);
+  const [business, setBusiness] = useState<BusinessProfile>(initialDraft?.business ?? {
     name: '',
     industry: '',
     city: '',
     employeesCount: '',
     modules: ['finance', 'documents', 'clients', 'tasks', 'employees'],
   });
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    if (completedRef.current) return;
+    try {
+      localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify({ step, business }));
+    } catch {
+      // Continue onboarding even if browser storage is unavailable.
+    }
+  }, [step, business]);
 
   const toggleModule = (key: string) => {
     setBusiness(b => ({
@@ -63,6 +103,12 @@ export function OnboardingPage() {
   const next = () => {
     if (step < 2) setStep(s => s + 1);
     else {
+      completedRef.current = true;
+      try {
+        localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+      } catch {
+        // The completed profile is saved by AppContext.
+      }
       completeOnboarding(business);
       toast.success('BIZBOX готов!', 'Ваш бизнес успешно настроен. Добро пожаловать!');
     }

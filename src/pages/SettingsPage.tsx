@@ -14,6 +14,7 @@ import { formatCurrency } from '@/lib/format';
 import { APP_VERSION } from '@/lib/telegram';
 import { PLANS, PAYMENT_CONTACT } from '@/lib/billing';
 import { getNotificationPreferences } from '@/lib/notificationPreferences';
+import { HomeScreenCard } from '@/components/HomeScreenCard';
 
 const planNames: Record<string, string> = { free: 'FREE', business: 'BUSINESS', pro: 'PRO' };
 
@@ -33,6 +34,8 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
   return (
     <div className="space-y-6">
       <PageHeader title="Настройки" subtitle="Управление аккаунтом и бизнесом" />
+      <div className="grid grid-cols-2 gap-3"><Button variant="secondary" onClick={()=>onNavigate('assistant')}>ИИ-помощник</Button><Button variant="secondary" onClick={()=>onNavigate('referrals')}>Приглашения</Button></div>
+      <HomeScreenCard />
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Section nav */}

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Wallet, FileText, Users, CheckSquare, UserCog, Calendar, Briefcase, Settings, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Wallet, FileText, Users, CheckSquare, UserCog, Calendar, Briefcase, Settings, CreditCard, Sparkles, Gift } from 'lucide-react';
 import type { Page } from '@/types';
 import { Logo } from '@/components/Logo';
 import { cn } from '@/lib/cn';
@@ -11,6 +11,8 @@ interface SidebarProps {
 
 const navItems: { page: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { page: 'dashboard', label: 'Главная', icon: LayoutDashboard },
+  { page: 'assistant', label: 'ИИ-помощник', icon: Sparkles },
+  { page: 'referrals', label: 'Приглашения', icon: Gift },
   { page: 'finance', label: 'Финансы', icon: Wallet },
   { page: 'documents', label: 'Документы', icon: FileText },
   { page: 'clients', label: 'Клиенты', icon: Users },

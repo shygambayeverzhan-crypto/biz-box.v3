@@ -11,14 +11,14 @@ import { getTelegram, isTelegramLaunch, telegramDisplayName } from '@/lib/telegr
 import { verifyAccessCode, type SubscriptionAccess } from '@/lib/subscriptionAccess';
 import { useBilling, type BillingStatus, type ServerPaymentRequest } from '@/lib/billingApi';
 import type { PaidPlan } from '@/lib/billing';
+import { applyProposal, type AssistantProposal } from '@/lib/assistantActions';
 
 interface AuthState { mode: 'telegram' | 'demo' | null }
-interface ReferralStats { code: string; invitedCount: number; bonusEarned: number }
 export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error';
 interface AppContextValue {
   state: AppState;
   auth: AuthState;
-  referral: ReferralStats;
+  applyAssistantProposal: (proposal: AssistantProposal) => Promise<void>;
   subscriptionAccess: SubscriptionAccess | null;
   activateAccessCode: (code: string) => Promise<void>;
   paymentRequest: ServerPaymentRequest | null;
@@ -70,7 +70,6 @@ interface AppContextValue {
   updatePaymentStatus: (id: string, status: PaymentStatus) => void;
   confirmPayment: (id: string) => void;
   rejectPayment: (id: string) => void;
-  applyReferralCode: (code: string) => { ok: boolean; message: string };
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -108,7 +107,6 @@ function readLegacy(): AppState | null {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setReactState] = useState<AppState>(emptyState);
   const [auth, setAuth] = useState<AuthState>({ mode: null });
-  const [referral, setReferral] = useState<ReferralStats>({ code: '', invitedCount: 0, bonusEarned: 0 });
   const [bootStatus, setBootStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [bootError, setBootError] = useState('');
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
@@ -726,19 +724,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(s => ({ ...s, payments: s.payments.map(p => p.id === id && p.status !== 'confirmed' && p.status !== 'rejected' ? { ...p, status: 'rejected' } : p) }));
   }, [setState]);
 
-  const applyReferralCode = useCallback((code: string) => {
-    if (modeRef.current !== 'demo') return { ok: false, message: 'Используйте персональный код доступа, выданный владельцем BizBox после проверки оплаты.' };
-    if (!code || code.trim().length === 0) {
-      return { ok: false, message: 'Введите промокод' };
-    }
-    const cleanCode = code.trim().toUpperCase();
-    if (cleanCode.startsWith('BIZ') || cleanCode === 'HACKALEM') {
-      setPlan('pro');
-      setReferral(r => ({ ...r, bonusEarned: r.bonusEarned + 500 }));
-      return { ok: true, message: 'Промокод применен! Тариф PRO активирован!' };
-    }
-    return { ok: false, message: 'Неверный промокод' };
-  }, [setPlan]);
+  const applyAssistantProposal = useCallback(async (proposal: AssistantProposal) => {
+    if (modeRef.current !== 'telegram' || !stateRef.current.onboardingComplete
+      || accessSuspended.current || currentTelegramUserId() !== telegramUserIdRef.current) throw new Error('Открой приложение заново через Telegram.');
+    if (syncConflict) throw new Error('Сначала выбери актуальную версию данных.');
+    const next = applyProposal(stateRef.current, proposal);
+    if (!isWorkspaceState(next)) throw new Error('Не удалось добавить запись: проверь поля или размер данных.');
+    setState(next);
+    await retrySave();
+  }, [setState, retrySave, syncConflict]);
 
 
 
@@ -751,7 +745,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const effectiveAccess = serverAccess || legacyAccess;
   const value: AppContextValue = {
     state: auth.mode === 'telegram' ? withPlan(state, effectiveAccess?.plan || 'free') : state,
-    auth, referral, subscriptionAccess: effectiveAccess, activateAccessCode, bootStatus, bootError, syncStatus, syncError, syncLocallySaved, syncConflict, legacyState,
+    auth, applyAssistantProposal, subscriptionAccess: effectiveAccess, activateAccessCode, bootStatus, bootError, syncStatus, syncError, syncLocallySaved, syncConflict, legacyState,
     paymentRequest: billing.paymentRequest, billingStatus: billing.billingStatus, billingError: billing.billingError,
     submitPaymentRequest: billing.submitPaymentRequest, refreshBilling: billing.refreshBilling,
     startDemo, logout, reloadWorkspace, resolveWorkspaceConflict, retrySave, importLegacy, dismissLegacy, exportWorkspace,
@@ -762,7 +756,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addTask, updateTask, deleteTask, toggleTask,
     addEmployee, updateEmployee, deleteEmployee,
     markNotificationRead, markAllNotificationsRead, setPlan,
-    addPayment, updatePaymentStatus, confirmPayment, rejectPayment, applyReferralCode,
+    addPayment, updatePaymentStatus, confirmPayment, rejectPayment,
   };
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

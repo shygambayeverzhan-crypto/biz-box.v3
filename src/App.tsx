@@ -15,6 +15,8 @@ import { CalendarPage } from '@/pages/CalendarPage';
 import SpecialistsPage from '@/pages/SpecialistsPage';
 import SubscriptionPageComponent from '@/pages/SubscriptionPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { AssistantPage } from '@/pages/AssistantPage';
+import { ReferralsPage } from '@/pages/ReferralsPage';
 import { Lock } from 'lucide-react';
 import type { Page } from '@/types';
 import { WorkspaceLoading, SyncBanner, LegacyImport } from '@/components/WorkspaceStatus';
@@ -83,6 +85,8 @@ function AppContent() {
       {page === 'calendar' && <CalendarPage />}
       {page === 'subscription' && <SubscriptionPageComponent />}
       {page === 'settings' && <SettingsPage onNavigate={handleNavigate} />}
+      {page === 'assistant' && <AssistantPage key={getTelegram()?.initDataUnsafe?.user?.id || auth.mode} />}
+      {page === 'referrals' && <ReferralsPage key={getTelegram()?.initDataUnsafe?.user?.id || auth.mode} />}
     </AppLayout>
   );
 }

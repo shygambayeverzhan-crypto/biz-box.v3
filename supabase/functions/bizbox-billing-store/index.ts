@@ -7,6 +7,7 @@ const ACTIONS = new Set([
   'claim_notification', 'mark_notification', 'release_notification', 'get_request', 'mark_customer_notified',
 ]);
 const MAX_BODY_BYTES = 16_384;
+const GROWTH_ACTIONS = new Set(['referral_register','referral_state','wallet_redeem','assistant_reserve']);
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -87,6 +88,11 @@ function databaseError(body: unknown): Response {
     REQUEST_NOT_FOUND: [404, 'Заявка не найдена.'],
     NO_PENDING_REQUEST: [409, 'Сначала выберите тариф и создайте заявку.'],
     RATE_LIMIT: [429, 'За последние 24 часа уже создано 5 заявок. Попробуйте позже.'],
+    AI_RATE_LIMIT: [429, 'Подождите несколько секунд. Доступно до 30 вопросов в сутки.'],
+    AI_DAILY_LIMIT: [429, 'Дневной лимит ИИ исчерпан. Попробуйте завтра.'],
+    INSUFFICIENT_BALANCE: [409, 'На бонусном балансе недостаточно средств.'],
+    PAYMENT_PENDING: [409, 'Сначала дождитесь решения по текущей заявке на оплату.'],
+    ACTIVE_PRO: [409, 'Сначала дождитесь окончания действующего PRO.'],
   };
   if (typeof error.message === 'string' && Object.hasOwn(known, error.message)) {
     const [status, message] = known[error.message];
@@ -114,14 +120,14 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
     if (!input || typeof input !== 'object' || Array.isArray(input)) return fail('INVALID_BODY', 'Некорректный запрос.', 400);
     const body = input as Record<string, unknown>;
-    if (typeof body.action !== 'string' || !ACTIONS.has(body.action)) return fail('INVALID_ACTION', 'Неизвестное действие.', 400);
+    if (typeof body.action !== 'string' || (!ACTIONS.has(body.action) && !GROWTH_ACTIONS.has(body.action))) return fail('INVALID_ACTION', 'Неизвестное действие.', 400);
     if (!body.args || typeof body.args !== 'object' || Array.isArray(body.args)) return fail('INVALID_ARGUMENT', 'Некорректные аргументы.', 400);
     const config = credentials();
     if (!config) return fail('NOT_CONFIGURED', 'Сервис ещё не настроен.', 503);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10_000);
     try {
-      const result = await fetch(config.url, {
+      const result = await fetch(GROWTH_ACTIONS.has(body.action) ? config.url.replace('bizbox_billing_action','bizbox_growth_action') : config.url, {
         method: 'POST', headers: config.headers, signal: controller.signal, redirect: 'error',
         body: JSON.stringify({ p_action: body.action, p_args: body.args }),
       });

@@ -1,11 +1,11 @@
 import type { CloudStorage } from './cloudWorkspace';
 
 export const BOT_URL = 'https://t.me/Biznowbox_bot?startapp';
-export const APP_VERSION = '2.3-glass';
+export const APP_VERSION = '2.4-assistant';
 
 export interface TelegramWebApp {
   initData: string;
-  initDataUnsafe?: { user?: { id: number; first_name?: string; last_name?: string; username?: string } };
+  initDataUnsafe?: { start_param?: string; user?: { id: number; first_name?: string; last_name?: string; username?: string } };
   platform: string;
   CloudStorage?: CloudStorage;
   ready: () => void;
@@ -19,6 +19,10 @@ export interface TelegramWebApp {
   setHeaderColor?: (color: string) => void;
   setBackgroundColor?: (color: string) => void;
   setBottomBarColor?: (color: string) => void;
+  addToHomeScreen?: () => void;
+  checkHomeScreenStatus?: (callback: (status: string) => void) => void;
+  onEvent?: (event: string, handler: () => void) => void;
+  offEvent?: (event: string, handler: () => void) => void;
 }
 
 declare global {

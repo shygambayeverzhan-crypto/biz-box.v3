@@ -261,11 +261,25 @@ export function installTelegramMock(): void {
     },
   };
 
+  const mockServices = options.get('services') === 'mock';
+  const homeHandlers = new Set<() => void>();
+  let homeAdded = false;
+  if (mockServices) {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async (input, init) => {
+      if (String(input) !== 'https://biz-box-v3.vercel.app/api/bizbox') return nativeFetch(input, init);
+      const body = JSON.parse(String(init?.body || '{}'));
+      if (body.action === 'state') return Response.json({subscription:null,request:null});
+      if (body.action === 'referral_state') return Response.json({code:'a'.repeat(32),balance:1499,earned:1499,invited:2,paid:1,history:[{id:'fixture-reward',amount:1499,kind:'referral_bonus',date:'2026-10-26T12:00:00Z'}],invitations:[{date:'2026-10-26T12:00:00Z',status:'rewarded',bonus:1499},{date:'2026-10-26T13:00:00Z',status:'registered',bonus:0}]});
+      if (body.action === 'assistant') return Response.json({text:'ТЕСТОВЫЙ ОТВЕТ (не модель): подготовлена задача. Подтверди её ниже.',sources:['Тестовая среда'],remaining:29,proposals:[{id:'11111111-1111-4111-8111-111111111111',action:{kind:'task',title:'Проверить рекламу',description:'Тест подтверждения',dueDate:'2026-10-27',priority:'medium'}}]});
+      return Response.json({error:'Тестовый сервис: действие отключено'},{status:400});
+    };
+  }
   const webApp = {
     version: '9.0',
     platform: 'web',
     // Empty signed data prevents the billing client from making real requests.
-    initData: '',
+    initData: mockServices ? 'isolated-fixture-not-a-real-session' : '',
     initDataUnsafe: { user: { id: userId, first_name: 'Проверка' } },
     CloudStorage: cloud,
     ready() {},
@@ -277,6 +291,10 @@ export function installTelegramMock(): void {
     },
     enableClosingConfirmation() { closingStatus.textContent = 'Предупреждение при закрытии: вкл'; },
     disableClosingConfirmation() { closingStatus.textContent = 'Предупреждение при закрытии: выкл'; },
+    checkHomeScreenStatus(callback: (status: string) => void) { callback(homeAdded ? 'added' : 'missed'); },
+    addToHomeScreen() { homeAdded = true; homeHandlers.forEach(handler => handler()); },
+    onEvent(event: string, handler: () => void) { if(event === 'homeScreenAdded')homeHandlers.add(handler); },
+    offEvent(event: string, handler: () => void) { if(event === 'homeScreenAdded')homeHandlers.delete(handler); },
   };
   window.Telegram = { WebApp: webApp };
 }

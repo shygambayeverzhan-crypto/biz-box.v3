@@ -51,6 +51,9 @@ test('unknown tools and malformed proposals are not executed',()=>{
 test('AI provider access errors are honest and do not expose secrets or pretend success',async()=>{
   await assert.rejects(askAssistant({context,message:'Привет',history:[]},{token:'SECRET',fetcher:async()=>Response.json({error:{message:'SECRET'}},{status:402})}),e=>e.code==='ai_access_required'&&!e.message.includes('SECRET'));
   await assert.rejects(askAssistant({context,message:'Привет',history:[]},{token:'SECRET',fetcher:async()=>Response.json({error:{code:'insufficient_quota',message:'SECRET'}},{status:429})}),e=>e.code==='ai_insufficient_funds'&&!e.message.includes('SECRET'));
+  for(const [code,expected] of [['credit_balance_exhausted','ai_insufficient_funds'],['project_spend_limit_exceeded','ai_spend_limit'],['organization_spend_limit_exceeded','ai_spend_limit'],['organization_usage_limit_exceeded','ai_spend_limit']]) {
+    await assert.rejects(askAssistant({context,message:'Привет',history:[]},{token:'SECRET',fetcher:async()=>Response.json({error:{code,type:'insufficient_quota',message:'SECRET'}},{status:429})}),e=>e.status===503&&e.code===expected&&!e.message.includes('SECRET'));
+  }
 });
 test('confirmed AI proposals are applied once, including retry after failed sync',()=>{
   const p={id:'11111111-1111-4111-8111-111111111111',action:{kind:'task',title:'Позвонить',description:'',dueDate:'2026-10-27',priority:'medium'}};

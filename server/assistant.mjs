@@ -116,7 +116,9 @@ export async function askAssistant(input, options = {}) {
     } catch { throw new HttpError(504,'ai_timeout','ИИ не успел ответить. Попробуй ещё раз — записи не изменены.'); }
     if (!response.ok) {
       const providerCode=data?.error?.code || data?.error?.type;
-      if(providerCode==='insufficient_quota') throw new HttpError(503,'ai_insufficient_funds','Баланс OpenAI API исчерпан или не подключена оплата. Владелец должен проверить баланс OpenAI API.');
+      if(['insufficient_quota','credit_balance_exhausted'].includes(providerCode)) throw new HttpError(503,'ai_insufficient_funds','Баланс OpenAI API исчерпан или не подключена оплата. Владелец должен проверить баланс OpenAI API.');
+      if(['organization_spend_limit_exceeded','project_spend_limit_exceeded','organization_usage_limit_exceeded'].includes(providerCode)) throw new HttpError(503,'ai_spend_limit','Достигнут лимит расходов или использования OpenAI API. Владелец должен проверить ограничения проекта в OpenAI.');
+      if(data?.error?.type==='insufficient_quota') throw new HttpError(503,'ai_quota_required','OpenAI ограничил доступ по балансу или квоте. Владелец должен проверить оплату и лимиты API.');
       if(providerCode==='invalid_api_key') throw new HttpError(503,'ai_invalid_key','Ключ OpenAI недействителен. Владелец должен обновить его в настройках сервера.');
       if(providerCode==='model_not_found') throw new HttpError(503,'ai_model_unavailable','Модель недоступна для этого проекта OpenAI. Владелец должен проверить доступ к модели.');
       const funding=[401,402,403].includes(response.status);

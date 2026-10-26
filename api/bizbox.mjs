@@ -189,7 +189,7 @@ async function setup(body, request) {
   if(body.operation === 'repair_menu') {
     await api('setChatMenuButton',{menu_button:{type:'web_app',text:'Открыть BizBox',web_app:{url:APP_URL}}});
     const menu=await api('getChatMenuButton',{});
-    return {ok:menu.web_app?.url===APP_URL,url:menu.web_app?.url};
+    return {ok:menu.web_app?.url?.replace(/\/$/,'')===APP_URL,url:menu.web_app?.url};
   }
   const hook = await api('getWebhookInfo', {});
   const state = await billingStore('list_pending', { admin_id: ADMIN_ID });

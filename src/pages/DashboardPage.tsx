@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Wallet, Users, CheckSquare, Plus, ArrowRight,
-  Calculator, Scale, Megaphone, UsersRound, Palette, Server, Star, Clock,
+  Calculator, Scale, Megaphone, UsersRound, Palette, Server, Clock, Minus,
 } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import { useToast } from '@/store/ToastContext';
@@ -83,7 +83,7 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
     return { label: month.toLocaleDateString('ru-RU', { month: 'short' }), value };
   }), [completedTransactions, currentYear, currentMonth]);
 
-  const userName = state.user?.name || 'Ержан';
+  const userName = state.user?.name?.split(' ')[0] || 'предприниматель';
 
   const handleTaskToggle = (task: Task) => {
     toggleTask(task.id);
@@ -91,12 +91,13 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">{greeting()}, {userName}</h1>
-          <p className="text-sm text-white/50 mt-1">Вот что происходит в вашем бизнесе сегодня.</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-white/50 mb-2">{now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' })}</p>
+          <h1 className="text-[27px] sm:text-3xl font-semibold text-white tracking-tight leading-tight">{greeting()}, {userName}</h1>
+          <p className="text-sm text-white/60 mt-2">Ваш бизнес — в одном месте.</p>
         </div>
         <Button onClick={() => setOpModalOpen(true)}>
           <Plus className="w-4 h-4" /> Новая операция
@@ -104,35 +105,37 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
       </div>
 
       {/* Revenue card */}
-      <Card className="p-5 sm:p-6 relative overflow-hidden">
+      <Card className="p-5 sm:p-7 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-accent-500/10 blur-3xl pointer-events-none" />
         <div className="relative flex flex-col lg:flex-row gap-6">
           <div className="lg:w-1/3">
-            <p className="text-sm text-white/50">Выручка за месяц</p>
+            <div className="flex items-center justify-between gap-3"><p className="text-sm text-white/65">Выручка за месяц</p><span className="text-[10px] uppercase tracking-widest text-white/50">{now.toLocaleDateString('ru-RU', { month: 'long' })}</span></div>
             <div className="flex items-baseline gap-2 mt-1">
-              <AnimatedNumber value={income} format={formatCurrency} className="text-3xl sm:text-4xl font-bold text-white tabular-nums" />
+              <AnimatedNumber value={income} format={formatCurrency} className="text-[38px] sm:text-5xl font-semibold tracking-tight text-white tabular-nums" />
             </div>
             <div className="flex items-center gap-1.5 mt-3">
-              {revenueChange !== null && revenueChange < 0
+              {revenueChange === null ? <Minus className="w-4 h-4 text-white/50" /> : revenueChange < 0
                 ? <TrendingDown className="w-4 h-4 text-danger-400" />
                 : <TrendingUp className="w-4 h-4 text-success-400" />}
-              <span className={cn('text-sm font-medium', revenueChange !== null && revenueChange < 0 ? 'text-danger-400' : 'text-success-400')}>
+              <span className={cn('text-xs font-medium', revenueChange === null ? 'text-white/55' : revenueChange < 0 ? 'text-danger-400' : 'text-success-400')}>
                 {revenueTrendLabel}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-3 mt-6">
-              <div className="bg-bg-base rounded-xl p-3 border border-border">
+              <div className="liquid-inset rounded-2xl p-3.5 border border-border">
                 <p className="text-2xs text-white/40">Расходы</p>
                 <p className="text-base font-semibold text-white mt-0.5 tabular-nums">{formatCurrency(expenses)}</p>
               </div>
-              <div className="bg-bg-base rounded-xl p-3 border border-border">
+              <div className="liquid-inset rounded-2xl p-3.5 border border-border">
                 <p className="text-2xs text-white/40">Прибыль</p>
-                <p className="text-base font-semibold text-success-400 mt-0.5 tabular-nums">{formatCurrency(profit)}</p>
+                <p className={cn('text-base font-semibold mt-0.5 tabular-nums', profit < 0 ? 'text-danger-400' : profit > 0 ? 'text-success-400' : 'text-white')}>{formatCurrency(profit)}</p>
               </div>
             </div>
           </div>
           <div className="lg:flex-1 min-w-0">
-            <LineChart data={revenueData} height={220} formatValue={formatCurrency} />
+            <p className="text-[10px] tracking-widest uppercase text-white/45 mb-2">Выручка · 6 месяцев</p>
+            <LineChart data={revenueData} height={revenueData.every(d => d.value === 0) ? 100 : 150} formatValue={formatCurrency} />
+            {revenueData.every(d => d.value === 0) && <p className="text-xs text-white/50 mt-3">Доходов пока нет. Добавьте первую операцию.</p>}
           </div>
         </div>
       </Card>
@@ -140,7 +143,7 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <KpiCard label="Расходы" value={expenses} format={formatCurrency} icon={<TrendingDown className="w-[18px] h-[18px]" />} accent="text-danger-400 bg-danger-500/10" onClick={() => onNavigate('finance')} />
-        <KpiCard label="Прибыль" value={profit} format={formatCurrency} icon={<Wallet className="w-[18px] h-[18px]" />} accent="text-success-400 bg-success-500/10" onClick={() => onNavigate('finance')} />
+        <KpiCard label="Прибыль" value={profit} format={formatCurrency} icon={<Wallet className="w-[18px] h-[18px]" />} accent={profit < 0 ? 'text-danger-400 bg-danger-500/10' : 'text-success-400 bg-success-500/10'} onClick={() => onNavigate('finance')} />
         <KpiCard label="Клиенты" value={state.clients.length} format={n => String(Math.round(n))} icon={<Users className="w-[18px] h-[18px]" />} accent="text-accent-400 bg-accent-500/10" onClick={() => onNavigate('clients')} />
         <KpiCard label="Задачи" value={state.tasks.filter(t => !t.completed).length} format={n => String(Math.round(n))} icon={<CheckSquare className="w-[18px] h-[18px]" />} accent="text-warning-400 bg-warning-500/10" onClick={() => onNavigate('tasks')} />
         <KpiCard label="Сотрудники" value={state.employees.length} format={n => String(Math.round(n))} icon={<Users className="w-[18px] h-[18px]" />} accent="text-accent-300 bg-accent-500/10" onClick={() => onNavigate('employees')} />
@@ -222,6 +225,7 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
           </button>
         </div>
         <div className="space-y-1">
+          {state.transactions.length === 0 && <p className="text-sm text-white/50 py-6 text-center">Здесь появятся ваши доходы и расходы.</p>}
           {state.transactions.slice(0, 5).map(t => (
             <div key={t.id} className="flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg hover:bg-bg-hover transition-colors">
               <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', t.type === 'income' ? 'bg-success-500/10 text-success-400' : t.type === 'expense' ? 'bg-danger-500/10 text-danger-400' : 'bg-accent-500/10 text-accent-400')}>

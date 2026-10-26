@@ -1,83 +1,112 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: dark;
+  --app-safe-top: max(env(safe-area-inset-top, 0px), var(--tg-content-safe-area-inset-top, 0px));
+  --app-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-content-safe-area-inset-bottom, 0px));
+  --glass-border: rgba(225, 237, 255, 0.15);
+  --glass-highlight: rgba(255, 255, 255, 0.11);
 }
-
-html, body, #root {
-  height: 100%;
-}
-
+html { min-height: 100%; scroll-padding-top: calc(84px + var(--app-safe-top)); }
+body, #root { min-height: 100%; }
 body {
-  background-color: #070A12;
-  color: #E6EAF2;
+  margin: 0;
+  background-color: #080e1b;
+  background-image:
+    radial-gradient(ellipse at 0% 0%, rgba(65, 109, 190, 0.27), transparent 48%),
+    radial-gradient(ellipse at 100% 25%, rgba(93, 72, 155, 0.19), transparent 48%),
+    radial-gradient(ellipse at 60% 100%, rgba(28, 110, 114, 0.12), transparent 50%);
+  background-attachment: fixed;
+  color: #eef3ff;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-
-* {
-  -webkit-tap-highlight-color: transparent;
-}
-
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #1E2A44;
-  border-radius: 9999px;
-  border: 2px solid #070A12;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #2A3A5C;
-}
-
-input, select, textarea {
-  font-family: inherit;
-}
-
-input[type='date']::-webkit-calendar-picker-indicator {
-  filter: invert(0.7);
-  cursor: pointer;
-}
+* { -webkit-tap-highlight-color: transparent; }
+button, a, input, select, textarea { touch-action: manipulation; }
+button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px solid #a4c8ff; outline-offset: 4px; }
+::selection { background: rgba(112, 167, 255, 0.3); color: white; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #44536c; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #62728e; }
+input, select, textarea { font-family: inherit; }
+select option { background: #192339; color: #eef3ff; }
+input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
 
 @layer components {
-  .glass {
-    background: rgba(16, 24, 43, 0.7);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+  .glass, .liquid-card {
+    background: linear-gradient(145deg, rgba(210, 228, 255, 0.11), rgba(69, 86, 122, 0.07) 70%), rgba(22, 32, 51, 0.65);
+    border: 1px solid var(--glass-border);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 rgba(255, 255, 255, 0.025), 0 12px 36px rgba(0, 5, 18, 0.16);
+    backdrop-filter: blur(22px) saturate(145%);
+    -webkit-backdrop-filter: blur(22px) saturate(145%);
   }
-  .glass-strong {
-    background: rgba(12, 19, 34, 0.85);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+  .liquid-card { border-radius: 26px; }
+  .glass-strong, .liquid-panel {
+    background: linear-gradient(135deg, rgba(222, 234, 255, 0.09), rgba(255, 255, 255, 0.025)), rgba(17, 26, 43, 0.9);
+    border: 1px solid rgba(225, 237, 255, 0.18);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 18px 50px rgba(0, 5, 18, 0.34);
+    backdrop-filter: blur(32px) saturate(155%);
+    -webkit-backdrop-filter: blur(32px) saturate(155%);
   }
-  .skeleton {
-    position: relative;
-    overflow: hidden;
-    background: #10182B;
+  .liquid-inset {
+    background: rgba(5, 13, 28, 0.3);
+    border: 1px solid rgba(215, 230, 255, 0.1);
+    box-shadow: inset 0 1px 3px rgba(0, 4, 20, 0.1);
   }
+  .liquid-control {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035));
+    border: 1px solid rgba(230, 239, 255, 0.13);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  }
+  .liquid-primary {
+    background: linear-gradient(160deg, #75a9ff 0%, #4b84ef 50%, #4774e3 100%);
+    border: 1px solid rgba(200, 225, 255, 0.36);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.27), 0 5px 20px rgba(59, 111, 225, 0.2);
+    color: #08162e;
+  }
+  .liquid-primary:hover { filter: brightness(1.08); }
+  .app-canvas { min-height: 100vh; min-height: 100dvh; padding-top: var(--app-safe-top); }
+  .app-topbar { top: var(--app-safe-top); }
+  .app-content { padding-bottom: calc(116px + var(--app-safe-bottom)); }
+  .liquid-dock {
+    position: fixed;
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: calc(12px + var(--app-safe-bottom));
+    max-width: 480px;
+    margin-inline: auto;
+    border-radius: 28px;
+  }
+  .dock-item { min-width: 0; min-height: 56px; border-radius: 21px; color: #b3bfd3; }
+  .dock-item-active {
+    color: #dbeaff;
+    background: linear-gradient(155deg, rgba(132, 175, 255, 0.25), rgba(101, 151, 246, 0.09));
+    box-shadow: inset 0 1px 0 rgba(224, 238, 255, 0.2), 0 2px 7px rgba(0, 0, 0, 0.1);
+  }
+  .skeleton { position: relative; overflow: hidden; background: rgba(163, 191, 232, 0.09); }
   .skeleton::after {
     content: '';
     position: absolute;
     inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
     animation: shimmer 1.6s infinite;
   }
 }
-
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+@media (min-width: 1024px) { .app-content { padding-bottom: 32px; } }
+/* 16px controls avoid the iOS focus zoom that moves a Mini App's viewport. */
+@media (max-width: 639px) { input, select, textarea { font-size: 16px !important; } }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass, .liquid-card, .glass-strong, .liquid-panel { background: #1a263b; }
 }
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .liquid-card, .glass-strong, .liquid-panel { background: #1a263b; backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }

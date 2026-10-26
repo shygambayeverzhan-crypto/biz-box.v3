@@ -5,7 +5,8 @@ import type {
 } from '@/types';
 import { createSeedState, createNewUserState } from '@/lib/seed';
 import { uid } from '@/lib/format';
-import { loadWorkspace, saveWorkspace, isWorkspaceState, type CloudStorage } from '@/lib/cloudWorkspace';
+import { loadWorkspace, saveWorkspace, isWorkspaceState, isWorkspaceCommitResolved, WorkspaceStorageError, type CloudStorage } from '@/lib/cloudWorkspace';
+import { readWorkspaceRecovery, writeWorkspaceRecovery, writeWorkspaceCheckpoint, archiveWorkspaceVersion, clearWorkspaceRecovery, reconcileWorkspaceRecovery, sameWorkspaceState, type WorkspaceRecovery } from '@/lib/workspaceRecovery';
 import { getTelegram, isTelegramLaunch, telegramDisplayName } from '@/lib/telegram';
 import { verifyAccessCode, type SubscriptionAccess } from '@/lib/subscriptionAccess';
 import { useBilling, type BillingStatus, type ServerPaymentRequest } from '@/lib/billingApi';
@@ -29,10 +30,13 @@ interface AppContextValue {
   bootError: string;
   syncStatus: SyncStatus;
   syncError: string;
+  syncLocallySaved: boolean;
+  syncConflict: boolean;
   legacyState: AppState | null;
   startDemo: () => void;
   logout: () => void;
   reloadWorkspace: () => Promise<void>;
+  resolveWorkspaceConflict: (choice: 'local' | 'cloud') => Promise<void>;
   retrySave: () => Promise<void>;
   importLegacy: () => Promise<void>;
   dismissLegacy: () => void;
@@ -73,6 +77,16 @@ const AppContext = createContext<AppContextValue | null>(null);
 const emptyState = () => ({ ...createNewUserState('', ''), user: null });
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Не удалось связаться с Telegram. Попробуйте ещё раз.';
 
+function downloadWorkspace(state: AppState, filename = 'bizbox-backup.json'): void {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function currentTelegramUserId(): string | null {
   const id = getTelegram()?.initDataUnsafe?.user?.id;
   return typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? String(id) : null;
@@ -99,6 +113,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [bootError, setBootError] = useState('');
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncError, setSyncError] = useState('');
+  const [syncLocallySaved, setSyncLocallySaved] = useState(false);
+  const [syncConflict, setSyncConflict] = useState(false);
   const [legacyState, setLegacyState] = useState<AppState | null>(null);
   const [subscriptionAccess, setSubscriptionAccess] = useState<SubscriptionAccess | null>(null);
   const accessRef = useRef<SubscriptionAccess | null>(null);
@@ -114,7 +130,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const savingRef = useRef<Promise<void> | null>(null);
   const completingRef = useRef(false);
   const bootRun = useRef(0);
-  const cacheKey = useRef<string | null>(null);
+  const recoveryBaseRef = useRef<string | null | undefined>(null);
+  const attemptedRef = useRef<AppState | null>(null);
+  const uncertainCommitRef = useRef<string | null>(null);
+  const offlineCheckpointRef = useRef(false);
+  const reconcileRef = useRef(false);
+  const durableRef = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const billing = useBilling({
     enabled: auth.mode === 'telegram' && bootStatus === 'ready' && !accessSuspended.current,
     userId: currentTelegramUserId(),
@@ -137,61 +159,136 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setReactState(next);
   }, []);
 
-  const cacheLocalCopy = useCallback((next: AppState) => {
-    if (!cacheKey.current) return;
-    try { localStorage.setItem(cacheKey.current, JSON.stringify(next)); } catch { /* Cloud is authoritative. */ }
+  const updateCloseGuard = useCallback(() => {
+    const app = getTelegram();
+    if ((pendingRef.current || attemptedRef.current) && !durableRef.current) app?.enableClosingConfirmation?.();
+    else app?.disableClosingConfirmation?.();
   }, []);
 
+  const cacheLocalCopy = useCallback((next: AppState) => {
+    const userId = telegramUserIdRef.current;
+    durableRef.current = Boolean(userId && writeWorkspaceRecovery({
+      version: 1, userId, baseRevision: recoveryBaseRef.current, state: next,
+      ...(attemptedRef.current ? { attempted: attemptedRef.current } : {}),
+      ...(uncertainCommitRef.current ? { commitUncertain: uncertainCommitRef.current } : {}),
+    }));
+    setSyncLocallySaved(durableRef.current);
+    updateCloseGuard();
+  }, [updateCloseGuard]);
+
   const flush = useCallback((): Promise<void> => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
     if (savingRef.current) return savingRef.current;
     if (!pendingRef.current || !storageRef.current) return Promise.resolve();
     let succeeded = false;
     const task = (async () => {
       setSyncStatus('saving');
       setSyncError('');
-      getTelegram()?.enableClosingConfirmation?.();
-      while (pendingRef.current) {
-        const next = pendingRef.current;
-        pendingRef.current = null;
-        try {
-          revisionRef.current = await saveWorkspace(storageRef.current!, next, revisionRef.current);
-          cacheLocalCopy(pendingRef.current || next);
+      try {
+        if (currentTelegramUserId() !== telegramUserIdRef.current) throw new Error('Telegram-аккаунт изменился. Откройте приложение снова.');
+        if (reconcileRef.current) {
+          if (uncertainCommitRef.current) {
+            if (!await isWorkspaceCommitResolved(storageRef.current!, uncertainCommitRef.current)) {
+              throw new WorkspaceStorageError('commit_unknown', 'Telegram ещё не завершил предыдущую отправку. Проверьте облако чуть позже; новые изменения пока сохранены отдельно.', uncertainCommitRef.current);
+            }
+            uncertainCommitRef.current = null;
+          }
+          const loaded = await loadWorkspace(storageRef.current!);
+          const recovery: WorkspaceRecovery = { version: 1, userId: telegramUserIdRef.current ?? '', baseRevision: recoveryBaseRef.current, state: pendingRef.current!, ...(attemptedRef.current ? { attempted: attemptedRef.current } : {}) };
+          const resolution = reconcileWorkspaceRecovery(recovery, loaded);
+          if (resolution === 'conflict') throw new WorkspaceStorageError('conflict', 'В облаке есть изменения из другого окна. Ваша версия сохранена отдельно; скачайте её копию перед объединением данных.');
+          revisionRef.current = loaded.revision;
+          recoveryBaseRef.current = loaded.revision;
+          attemptedRef.current = null;
+          reconcileRef.current = false;
+          if (resolution === 'saved') {
+            if (telegramUserIdRef.current && loaded.state) writeWorkspaceCheckpoint(telegramUserIdRef.current, loaded.state, loaded.revision);
+            if (pendingRef.current?.onboardingComplete && !stateRef.current.onboardingComplete) replaceState(pendingRef.current);
+            pendingRef.current = null;
+          }
+        }
+        while (pendingRef.current) {
+          if (currentTelegramUserId() !== telegramUserIdRef.current) throw new Error('Telegram-аккаунт изменился. Откройте приложение снова.');
+          const next = pendingRef.current;
+          pendingRef.current = null;
+          attemptedRef.current = next;
+          cacheLocalCopy(next);
+          revisionRef.current = await saveWorkspace(storageRef.current!, next, revisionRef.current, {
+            onCommitStarted: revision => {
+              uncertainCommitRef.current = revision;
+              cacheLocalCopy(pendingRef.current || next);
+            },
+            onCommitSettled: revision => {
+              if (uncertainCommitRef.current !== revision) return;
+              uncertainCommitRef.current = null;
+              cacheLocalCopy(pendingRef.current || attemptedRef.current || next);
+            },
+          });
+          if (telegramUserIdRef.current) writeWorkspaceCheckpoint(telegramUserIdRef.current, next, revisionRef.current);
+          recoveryBaseRef.current = revisionRef.current;
+          attemptedRef.current = null;
+          uncertainCommitRef.current = null;
+          if (pendingRef.current && sameWorkspaceState(pendingRef.current, next)) pendingRef.current = null;
+          if (pendingRef.current) cacheLocalCopy(pendingRef.current);
           if (next.onboardingComplete && !stateRef.current.onboardingComplete) {
             replaceState(next);
             setLegacyState(null);
           }
-        } catch (error) {
-          pendingRef.current = pendingRef.current || next;
-          setSyncStatus('error');
-          setSyncError(errorMessage(error));
-          throw error;
         }
+        if (telegramUserIdRef.current) clearWorkspaceRecovery(telegramUserIdRef.current);
+        durableRef.current = false;
+        setSyncLocallySaved(false);
+        setSyncStatus('saved');
+        setSyncConflict(false);
+        succeeded = true;
+      } catch (error) {
+        if (error instanceof WorkspaceStorageError && error.uncertainRevision) uncertainCommitRef.current = error.uncertainRevision;
+        pendingRef.current = pendingRef.current || attemptedRef.current;
+        reconcileRef.current = true;
+        if (pendingRef.current) cacheLocalCopy(pendingRef.current);
+        setSyncStatus('error');
+        setSyncConflict(error instanceof WorkspaceStorageError && error.code === 'conflict');
+        setSyncError(error instanceof WorkspaceStorageError && (error.code === 'timeout' || error.code === 'unavailable')
+          ? durableRef.current ? 'Облако временно недоступно. Изменения сохранены на этом устройстве и отправятся при восстановлении связи.' : 'Облако временно недоступно. Оставьте приложение открытым и повторите сохранение.'
+          : error instanceof WorkspaceStorageError && error.code === 'commit_unknown'
+            ? durableRef.current ? 'Telegram ещё не подтвердил отправку. Новые изменения сохранены на этом устройстве; повторите проверку облака.' : 'Telegram ещё не подтвердил отправку. Оставьте приложение открытым и повторите проверку облака.'
+          : errorMessage(error));
+        throw error;
+      } finally {
+        updateCloseGuard();
       }
-      setSyncStatus('saved');
-      getTelegram()?.disableClosingConfirmation?.();
-      succeeded = true;
     })();
     savingRef.current = task.finally(() => {
       savingRef.current = null;
       if (succeeded && pendingRef.current) return flush();
     });
     return savingRef.current;
-  }, [cacheLocalCopy, replaceState]);
+  }, [cacheLocalCopy, replaceState, updateCloseGuard]);
 
   const setState = useCallback((update: SetStateAction<AppState>) => {
     const next = typeof update === 'function' ? update(stateRef.current) : update;
-    if (next === stateRef.current) return;
+    if (modeRef.current === 'telegram' ? sameWorkspaceState(next, stateRef.current) : JSON.stringify(next) === JSON.stringify(stateRef.current)) return;
     replaceState(next);
     if (modeRef.current === 'telegram') {
-      cacheLocalCopy(next);
+      if (!pendingRef.current && !attemptedRef.current) recoveryBaseRef.current = revisionRef.current;
       pendingRef.current = next;
-      void flush().catch(() => { /* Visible sync error + explicit retry. */ });
+      cacheLocalCopy(next);
+      setSyncStatus('saving');
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => { saveTimer.current = null; void flush().catch(() => {}); }, 350);
     }
   }, [replaceState, cacheLocalCopy, flush]);
 
   const reloadWorkspace = useCallback(async () => {
     // Wait for any in-flight write before a user-requested reload.
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
     if (savingRef.current) await savingRef.current.catch(() => {});
+    const previousUserId = telegramUserIdRef.current;
+    const inMemoryRecovery: WorkspaceRecovery | null = modeRef.current === 'telegram' && pendingRef.current ? {
+      version: 1, userId: previousUserId ?? '', baseRevision: recoveryBaseRef.current, state: pendingRef.current,
+      ...(attemptedRef.current ? { attempted: attemptedRef.current } : {}),
+      ...(uncertainCommitRef.current ? { commitUncertain: uncertainCommitRef.current } : {}),
+    } : null;
     const run = ++bootRun.current;
     accessSuspended.current = true;
     clearBilling();
@@ -214,39 +311,113 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error('Для сохранения нужен свежий Telegram. Обновите его и откройте BizBox снова.');
       }
       storageRef.current = app.CloudStorage;
-      const loaded = await loadWorkspace(app.CloudStorage);
-      if (run !== bootRun.current) return;
       const userId = currentTelegramUserId();
-      const storedState = loaded.state || createNewUserState('', telegramDisplayName(app));
+      const recovery = inMemoryRecovery?.userId === (userId ?? '') ? inMemoryRecovery : userId ? readWorkspaceRecovery(userId) : null;
+      let loaded: Awaited<ReturnType<typeof loadWorkspace>> | null = null;
+      let loadError: unknown;
+      try { loaded = await loadWorkspace(app.CloudStorage); } catch (error) {
+        loadError = error;
+        if (!recovery) throw error;
+      }
+      if (run !== bootRun.current) return;
+      const resolution = recovery && loaded ? reconcileWorkspaceRecovery(recovery, loaded) : null;
+      const restored = recovery && resolution !== 'saved' ? recovery : null;
+      const storedState = restored?.state || loaded?.state || createNewUserState('', telegramDisplayName(app));
       let access: SubscriptionAccess | null = null;
-      if (storedState.accessCode && userId) {
-        try { access = await verifyAccessCode(storedState.accessCode, userId); } catch { /* Invalid/expired codes never grant access. */ }
+      // Local recovery never grants an access code that has not reached the cloud.
+      if (loaded?.state?.accessCode && userId) {
+        try { access = await verifyAccessCode(loaded.state.accessCode, userId); } catch { /* Invalid/expired codes never grant access. */ }
       }
       if (run !== bootRun.current) return;
       if (userId !== currentTelegramUserId()) throw new Error('Telegram-аккаунт изменился. Откройте приложение снова.');
-      revisionRef.current = loaded.revision;
-      pendingRef.current = null;
+      revisionRef.current = loaded?.revision ?? restored?.baseRevision ?? null;
+      pendingRef.current = restored && !restored.synced ? restored.state : null;
+      attemptedRef.current = resolution === 'resume' ? null : restored?.attempted ?? null;
+      uncertainCommitRef.current = restored?.commitUncertain ?? null;
+      offlineCheckpointRef.current = Boolean(restored?.synced && !loaded);
+      recoveryBaseRef.current = resolution === 'resume' ? loaded!.revision : restored ? restored.baseRevision : loaded!.revision;
+      reconcileRef.current = Boolean(restored && resolution !== 'resume');
       modeRef.current = 'telegram';
       telegramUserIdRef.current = userId;
-      cacheKey.current = userId ? 'bizbox_cache_v2_' + userId : null;
       const next = withPlan(storedState, access?.plan || 'free');
       accessSuspended.current = false;
       rememberAccess(access);
       replaceState(next);
       setAuth({ mode: 'telegram' });
-      setLegacyState(loaded.state ? null : readLegacy());
-      setSyncStatus(loaded.state ? 'saved' : 'idle');
-      setSyncError('');
-      app.disableClosingConfirmation?.();
+      setLegacyState(loaded?.state || restored ? null : readLegacy());
+      if (restored) {
+        if (!restored.synced) cacheLocalCopy(restored.state);
+        else { durableRef.current = true; setSyncLocallySaved(true); }
+        setSyncStatus(resolution === 'resume' ? 'saving' : 'error');
+        setSyncConflict(resolution === 'conflict');
+        setSyncError(resolution === 'conflict'
+          ? 'В облаке есть изменения из другого окна. Ваша версия сохранена отдельно; скачайте её копию перед объединением данных.'
+          : resolution === 'waiting' ? 'Telegram ещё не завершил предыдущую отправку. Проверьте облако чуть позже; новые изменения пока сохранены отдельно.'
+          : loadError ? 'Облако временно недоступно. Открыта сохранённая копия с этого устройства.' : '');
+      } else {
+        if (userId) clearWorkspaceRecovery(userId);
+        durableRef.current = false;
+        setSyncLocallySaved(false);
+        setSyncStatus(loaded?.state ? 'saved' : 'idle');
+        setSyncConflict(false);
+        setSyncError('');
+      }
+      if (userId && loaded?.state) writeWorkspaceCheckpoint(userId, loaded.state, loaded.revision);
+      updateCloseGuard();
       setBootStatus('ready');
+      if (restored && resolution === 'resume') void flush().catch(() => {});
     } catch (error) {
       if (run !== bootRun.current) return;
       setBootError(errorMessage(error));
       setBootStatus('error');
     }
-  }, [replaceState, clearAccess, rememberAccess, clearBilling]);
+  }, [replaceState, clearAccess, rememberAccess, clearBilling, cacheLocalCopy, updateCloseGuard, flush]);
 
   useEffect(() => { void reloadWorkspace(); }, [reloadWorkspace]);
+
+  // Called only after the user explicitly chooses which conflicting copy to keep.
+  const resolveWorkspaceConflict = useCallback(async (choice: 'local' | 'cloud') => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    if (savingRef.current) await savingRef.current.catch(() => {});
+    const storage = storageRef.current;
+    const userId = telegramUserIdRef.current;
+    if (!storage || modeRef.current !== 'telegram' || currentTelegramUserId() !== userId) throw new Error('Откройте BizBox снова через Telegram.');
+    if (uncertainCommitRef.current && !await isWorkspaceCommitResolved(storage, uncertainCommitRef.current)) {
+      throw new Error('Telegram ещё не завершил предыдущую отправку. Дождитесь подтверждения перед выбором версии.');
+    }
+    const loaded = await loadWorkspace(storage);
+    if (currentTelegramUserId() !== userId) throw new Error('Telegram-аккаунт изменился. Откройте приложение снова.');
+    const local = pendingRef.current || stateRef.current;
+    const backup = choice === 'local' ? loaded.state : local;
+    if (backup && !(userId && archiveWorkspaceVersion(userId, backup, choice === 'local' ? loaded.revision : revisionRef.current))) {
+      downloadWorkspace(backup, choice === 'local' ? 'bizbox-cloud-backup.json' : 'bizbox-local-backup.json');
+    }
+    revisionRef.current = loaded.revision;
+    recoveryBaseRef.current = loaded.revision;
+    attemptedRef.current = null;
+    uncertainCommitRef.current = null;
+    reconcileRef.current = false;
+    offlineCheckpointRef.current = false;
+    if (choice === 'local') {
+      pendingRef.current = local;
+      cacheLocalCopy(local);
+      await flush();
+      return;
+    }
+    pendingRef.current = null;
+    if (userId) {
+      clearWorkspaceRecovery(userId);
+      if (loaded.state) writeWorkspaceCheckpoint(userId, loaded.state, loaded.revision);
+    }
+    durableRef.current = false;
+    setSyncLocallySaved(false);
+    clearAccess();
+    replaceState(withPlan(loaded.state || createNewUserState('', telegramDisplayName(getTelegram()!)), 'free'));
+    setSyncStatus(loaded.state ? 'saved' : 'idle');
+    setSyncConflict(false);
+    setSyncError('');
+    updateCloseGuard();
+  }, [cacheLocalCopy, flush, clearAccess, replaceState, updateCloseGuard]);
   // A retried save may commit an earlier activation after its original promise
   // rejected. Verify again only after CloudStorage acknowledges the saved code.
   useEffect(() => {
@@ -299,11 +470,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [auth.mode, clearAccess, rememberAccess, setState, clearBilling]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (pendingRef.current || savingRef.current) { event.preventDefault(); event.returnValue = ''; }
+      if ((pendingRef.current || attemptedRef.current) && !durableRef.current) { event.preventDefault(); event.returnValue = ''; }
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, []);
+
+  useEffect(() => {
+    const resume = () => {
+      if (document.visibilityState !== 'hidden' && modeRef.current === 'telegram' && !savingRef.current) {
+        if (pendingRef.current) void flush().catch(() => {});
+        else if (offlineCheckpointRef.current) void reloadWorkspace();
+      }
+    };
+    window.addEventListener('online', resume);
+    window.addEventListener('focus', resume);
+    document.addEventListener('visibilitychange', resume);
+    return () => {
+      window.removeEventListener('online', resume);
+      window.removeEventListener('focus', resume);
+      document.removeEventListener('visibilitychange', resume);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [flush, reloadWorkspace]);
 
   const startDemo = useCallback(() => {
     if (getTelegram()) return; // Real Telegram sessions always use their cloud workspace.
@@ -322,7 +511,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     clearBilling();
     clearAccess();
     if (modeRef.current === 'telegram') {
-      void flush().then(() => getTelegram()?.close()).catch(() => {});
+      void flush().then(() => getTelegram()?.close()).catch(() => { if (durableRef.current) getTelegram()?.close(); });
       return;
     }
     modeRef.current = null;
@@ -369,13 +558,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = { ...stateRef.current, business, onboardingComplete: true, onboardingStep: 2 };
     if (modeRef.current !== 'telegram' || !storageRef.current) throw new Error('Откройте BizBox в Telegram.');
     completingRef.current = true;
+    if (!pendingRef.current && !attemptedRef.current) recoveryBaseRef.current = revisionRef.current;
     pendingRef.current = next;
+    cacheLocalCopy(next);
     try {
       await flush(); // Do not leave onboarding until Telegram acknowledges the committed snapshot.
     } finally {
       completingRef.current = false;
     }
-  }, [flush]);
+  }, [flush, cacheLocalCopy]);
 
   const saveOnboardingDraft = useCallback((business: BusinessProfile, step: number) => {
     if (stateRef.current.onboardingComplete || completingRef.current || pendingRef.current?.onboardingComplete) return;
@@ -383,32 +574,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [setState]);
 
   const retrySave = useCallback(async () => {
+    if (!pendingRef.current && offlineCheckpointRef.current) { await reloadWorkspace(); return; }
     const retryingCompletion = Boolean(pendingRef.current?.onboardingComplete && !stateRef.current.onboardingComplete);
     if (retryingCompletion) completingRef.current = true;
     try { await flush(); } finally {
       if (retryingCompletion) completingRef.current = false;
     }
-  }, [flush]);
+  }, [flush, reloadWorkspace]);
   const dismissLegacy = useCallback(() => setLegacyState(null), []);
   const importLegacy = useCallback(async () => {
     if (!legacyState || modeRef.current !== 'telegram') return;
     const { accessCode: _untrustedCode, ...legacyData } = legacyState;
     const next = { ...legacyData, user: { ...legacyData.user!, plan: 'free' as const } };
     clearAccess();
+    if (!pendingRef.current && !attemptedRef.current) recoveryBaseRef.current = revisionRef.current;
     pendingRef.current = next;
+    cacheLocalCopy(next);
     await flush();
     replaceState(next);
     setLegacyState(null);
-  }, [legacyState, flush, replaceState, clearAccess]);
+  }, [legacyState, flush, replaceState, clearAccess, cacheLocalCopy]);
 
   const exportWorkspace = useCallback(() => {
-    const blob = new Blob([JSON.stringify(pendingRef.current || stateRef.current, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'bizbox-backup.json';
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadWorkspace(pendingRef.current || stateRef.current);
   }, []);
 
   const updateUser = useCallback((patch: Partial<UserProfile>) => {
@@ -563,10 +751,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const effectiveAccess = serverAccess || legacyAccess;
   const value: AppContextValue = {
     state: auth.mode === 'telegram' ? withPlan(state, effectiveAccess?.plan || 'free') : state,
-    auth, referral, subscriptionAccess: effectiveAccess, activateAccessCode, bootStatus, bootError, syncStatus, syncError, legacyState,
+    auth, referral, subscriptionAccess: effectiveAccess, activateAccessCode, bootStatus, bootError, syncStatus, syncError, syncLocallySaved, syncConflict, legacyState,
     paymentRequest: billing.paymentRequest, billingStatus: billing.billingStatus, billingError: billing.billingError,
     submitPaymentRequest: billing.submitPaymentRequest, refreshBilling: billing.refreshBilling,
-    startDemo, logout, reloadWorkspace, retrySave, importLegacy, dismissLegacy, exportWorkspace,
+    startDemo, logout, reloadWorkspace, resolveWorkspaceConflict, retrySave, importLegacy, dismissLegacy, exportWorkspace,
     saveOnboardingDraft, completeOnboarding, updateUser, updateBusiness,
     addTransaction, updateTransaction, deleteTransaction,
     addDocument, updateDocument, deleteDocument,

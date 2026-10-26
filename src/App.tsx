@@ -18,6 +18,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { Lock } from 'lucide-react';
 import type { Page } from '@/types';
 import { WorkspaceLoading, SyncBanner, LegacyImport } from '@/components/WorkspaceStatus';
+import { getTelegram } from '@/lib/telegram';
 
 function Guard({ children, onNavigate, minimumPlan = 'pro' }: { children: ReactNode; onNavigate: (p: Page) => void; minimumPlan?: 'business' | 'pro' }) {
   const { state } = useApp();
@@ -51,6 +52,17 @@ function AppContent() {
   useEffect(() => {
     if (!auth.mode) setPage('dashboard');
   }, [auth.mode]);
+  useEffect(() => {
+    const app = getTelegram();
+    if (!app) return;
+    try {
+      if (app.isVersionAtLeast('6.9')) {
+        app.setHeaderColor?.('#080e1b');
+        app.setBackgroundColor?.('#080e1b');
+      }
+      if (app.isVersionAtLeast('7.10')) app.setBottomBarColor?.('#080e1b');
+    } catch { /* Cosmetic native chrome must not block the workspace. */ }
+  }, []);
 
   if (bootStatus !== 'ready') return <WorkspaceLoading />;
   if (!auth.mode) return <AuthPage />;
@@ -60,7 +72,7 @@ function AppContent() {
   const handleNavigate = (p: Page) => setPage(p);
 
   return (
-    <><SyncBanner /><AppLayout current={page} onNavigate={handleNavigate}>
+    <AppLayout current={page} onNavigate={handleNavigate}>
       {page === 'dashboard' && <DashboardPage onNavigate={handleNavigate} />}
       {page === 'finance' && <FinancePage />}
       {page === 'documents' && <Guard onNavigate={handleNavigate} minimumPlan="business"><DocumentsPage /></Guard>}
@@ -71,7 +83,7 @@ function AppContent() {
       {page === 'calendar' && <CalendarPage />}
       {page === 'subscription' && <SubscriptionPageComponent />}
       {page === 'settings' && <SettingsPage onNavigate={handleNavigate} />}
-    </AppLayout></>
+    </AppLayout>
   );
 }
 

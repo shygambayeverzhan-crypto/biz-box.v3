@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
-  loadWorkspace, saveWorkspace, isWorkspaceState, WorkspaceStorageError,
+  loadWorkspace, saveWorkspace, isWorkspaceState, isWorkspaceCommitResolved, WorkspaceStorageError,
   WORKSPACE_MANIFEST_KEY, WORKSPACE_CHUNK_SIZE, CLOUD_STORAGE_TIMEOUT_MS,
 } from '../src/lib/cloudWorkspace.ts';
 
@@ -83,7 +83,10 @@ test('a stalled callback times out without resetting data', async t => {
   storage.onRead = () => false;
   const pending = rejectsCode(loadWorkspace(storage), 'timeout');
   t.mock.timers.tick(CLOUD_STORAGE_TIMEOUT_MS + 1);
+  await new Promise(setImmediate);
+  t.mock.timers.tick(CLOUD_STORAGE_TIMEOUT_MS + 1);
   await pending;
+  assert.equal(storage.operations.length, 2);
 });
 
 test('corrupt manifests, missing chunks, modified chunks, and invalid state are rejected', async t => {
@@ -145,7 +148,9 @@ test('a known revision mismatch rejects before any write', async () => {
   const storage = new MemoryStorage();
   const revision = await saveWorkspace(storage, baseState(), null);
   storage.operations.length = 0;
-  await rejectsCode(saveWorkspace(storage, baseState(), null), 'conflict');
+  const changed = baseState();
+  changed.business.name = 'Неактуальная версия';
+  await rejectsCode(saveWorkspace(storage, changed, null), 'conflict');
   assert.equal(storage.operations.some(([op]) => op === 'setItem'), false);
   assert.equal((await loadWorkspace(storage)).revision, revision);
 });
@@ -164,7 +169,9 @@ test('a conflicting writer discovered after chunks were prepared is not overwrit
       storage.onWrite = undefined;
     }
   };
-  await rejectsCode(saveWorkspace(storage, baseState(), revision), 'conflict');
+  const changed = baseState();
+  changed.business.name = 'Местное изменение';
+  await rejectsCode(saveWorkspace(storage, changed, revision), 'conflict');
   assert.deepEqual(await loadWorkspace(storage), { state: otherState, revision: otherRevision });
 });
 
@@ -214,4 +221,136 @@ test('cleanup retains the current and previous generations and bounds successful
   const current = manifestOf(storage);
   for (const key of [...generationKeys(current), ...generationKeys(current.previous)]) assert.equal(storage.values.has(key), true);
   assert.equal(storage.values.size, 3);
+});
+
+test('identical snapshots do not write and reconcile a lost save acknowledgement', async () => {
+  const storage = new MemoryStorage();
+  const state = baseState();
+  const revision = await saveWorkspace(storage, state, null);
+  storage.operations.length = 0;
+  assert.equal(await saveWorkspace(storage, state, revision), revision);
+  assert.equal(await saveWorkspace(storage, state, null), revision);
+  assert.equal(storage.operations.some(([operation]) => operation === 'setItem'), false);
+});
+
+test('one transient read or chunk error recovers automatically with a bounded retry', async () => {
+  const storage = new MemoryStorage();
+  let failures = 1;
+  storage.onRead = (_, callback) => {
+    if (failures-- > 0) { callback('NETWORK_ERROR'); return false; }
+  };
+  assert.deepEqual(await loadWorkspace(storage), { state: null, revision: null });
+  assert.equal(storage.operations.length, 2);
+  failures = 1;
+  storage.onWrite = (key, _, callback) => {
+    if (key !== WORKSPACE_MANIFEST_KEY && failures-- > 0) { callback('NETWORK_ERROR'); return false; }
+  };
+  const revision = await saveWorkspace(storage, baseState(), null);
+  assert.equal((await loadWorkspace(storage)).revision, revision);
+});
+
+test('a manifest saved without its callback is reconciled after timeout without replaying it', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const storage = new MemoryStorage();
+  let commitStarted = false;
+  storage.onWrite = (key, value) => {
+    if (key === WORKSPACE_MANIFEST_KEY) {
+      storage.values.set(key, value);
+      commitStarted = true;
+      return false;
+    }
+  };
+  const pending = saveWorkspace(storage, baseState(), null);
+  while (!commitStarted) await new Promise(setImmediate);
+  t.mock.timers.tick(CLOUD_STORAGE_TIMEOUT_MS + 1);
+  const revision = await pending;
+  assert.equal(manifestOf(storage).revision, revision);
+  assert.equal(storage.operations.filter(([operation, key]) => operation === 'setItem' && key === WORKSPACE_MANIFEST_KEY).length, 1);
+  assert.deepEqual((await loadWorkspace(storage)).state, baseState());
+});
+
+test('a committed save whose confirmation cannot be read can safely be retried', async () => {
+  const storage = new MemoryStorage();
+  const state = baseState();
+  storage.onWrite = key => {
+    if (key === WORKSPACE_MANIFEST_KEY) storage.onRead = (_, callback) => { callback('NETWORK_ERROR'); return false; };
+  };
+  await rejectsCode(saveWorkspace(storage, state, null), 'unavailable');
+  const committedRevision = manifestOf(storage).revision;
+  storage.onRead = undefined;
+  storage.onWrite = undefined;
+  storage.operations.length = 0;
+  assert.equal(await saveWorkspace(storage, state, null), committedRevision);
+  assert.equal(storage.operations.some(([operation]) => operation === 'setItem'), false);
+});
+
+test('a timed-out manifest still in flight blocks newer edits until that exact commit lands', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const storage = new MemoryStorage();
+  const original = baseState();
+  const base = await saveWorkspace(storage, original, null);
+  const attempted = { ...original, business: { ...original.business, name: 'Первая правка' } };
+  let finishCommit;
+  storage.onWrite = (key, value, callback) => {
+    if (key === WORKSPACE_MANIFEST_KEY) {
+      finishCommit = () => { storage.values.set(key, value); callback(null, true); };
+      return false;
+    }
+  };
+  let failure;
+  const pending = saveWorkspace(storage, attempted, base).catch(error => { failure = error; });
+  while (!finishCommit) await new Promise(setImmediate);
+  t.mock.timers.tick(CLOUD_STORAGE_TIMEOUT_MS + 1);
+  await pending;
+  assert.equal(failure.code, 'commit_unknown');
+  assert.ok(failure.uncertainRevision);
+  assert.equal(await isWorkspaceCommitResolved(storage, failure.uncertainRevision), false);
+  assert.equal(manifestOf(storage).revision, base);
+  // The context persists this marker and does not send the newer queued state.
+  const { reconcileWorkspaceRecovery } = await import('../src/lib/workspaceRecovery.ts');
+  const latest = { ...attempted, business: { ...attempted.business, name: 'Вторая правка' } };
+  const recovery = { version: 1, userId: '123', baseRevision: base, state: latest, attempted, commitUncertain: failure.uncertainRevision };
+  assert.equal(reconcileWorkspaceRecovery(recovery, await loadWorkspace(storage)), 'waiting');
+  finishCommit();
+  assert.equal(await isWorkspaceCommitResolved(storage, failure.uncertainRevision), true);
+  const loaded = await loadWorkspace(storage);
+  assert.equal(reconcileWorkspaceRecovery(recovery, loaded), 'resume');
+  storage.onWrite = undefined;
+  const final = await saveWorkspace(storage, latest, loaded.revision);
+  assert.deepEqual(await loadWorkspace(storage), { state: latest, revision: final });
+});
+
+test('notification preferences accept only supported types and boolean values', () => {
+  const state = baseState();
+  state.user.notificationPreferences = { task: false, payment: true };
+  assert.equal(isWorkspaceState(state), true);
+  for (const invalid of [[], { task: 'false' }, { unknown: true }, null]) {
+    state.user.notificationPreferences = invalid;
+    assert.equal(isWorkspaceState(state), false);
+  }
+});
+
+test('closing before the manifest timeout still leaves a persisted uncertain revision', async () => {
+  const storage = new MemoryStorage();
+  const state = baseState();
+  const base = await saveWorkspace(storage, state, null);
+  const next = { ...state, business: { ...state.business, name: 'Первая отправка' } };
+  let recordedRevision;
+  let finishCommit;
+  storage.onWrite = (key, value, callback) => {
+    if (key === WORKSPACE_MANIFEST_KEY) {
+      assert.equal(JSON.parse(value).revision, recordedRevision, 'recovery marker exists before manifest leaves the app');
+      finishCommit = () => { storage.values.set(key, value); callback(null, true); };
+      return false;
+    }
+  };
+  const pending = saveWorkspace(storage, next, base, { onCommitStarted: revision => { recordedRevision = revision; } });
+  while (!finishCommit) await new Promise(setImmediate);
+  const { reconcileWorkspaceRecovery } = await import('../src/lib/workspaceRecovery.ts');
+  const latest = { ...next, business: { ...next.business, name: 'Ещё одна правка перед закрытием' } };
+  const afterReopen = { version: 1, userId: '123', baseRevision: base, state: latest, attempted: next, commitUncertain: recordedRevision };
+  assert.equal(reconcileWorkspaceRecovery(afterReopen, await loadWorkspace(storage)), 'waiting');
+  finishCommit();
+  await pending;
+  assert.equal(reconcileWorkspaceRecovery(afterReopen, await loadWorkspace(storage)), 'resume');
 });

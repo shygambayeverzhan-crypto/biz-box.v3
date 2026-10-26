@@ -1,7 +1,7 @@
 import type { CloudStorage } from './cloudWorkspace';
 
 export const BOT_URL = 'https://t.me/Biznowbox_bot?startapp';
-export const APP_VERSION = '2.2-admin';
+export const APP_VERSION = '2.3-glass';
 
 export interface TelegramWebApp {
   initData: string;
@@ -16,6 +16,9 @@ export interface TelegramWebApp {
   isVersionAtLeast: (version: string) => boolean;
   enableClosingConfirmation?: () => void;
   disableClosingConfirmation?: () => void;
+  setHeaderColor?: (color: string) => void;
+  setBackgroundColor?: (color: string) => void;
+  setBottomBarColor?: (color: string) => void;
 }
 
 declare global {

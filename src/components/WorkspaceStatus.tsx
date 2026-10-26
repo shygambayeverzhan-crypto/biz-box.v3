@@ -25,23 +25,43 @@ export function WorkspaceLoading() {
 }
 
 export function SyncBanner() {
-  const { auth, syncStatus, syncError, retrySave, reloadWorkspace, exportWorkspace } = useApp();
-  if (auth.mode === 'demo') return <div className="px-4 py-2 text-center text-xs text-amber-300 bg-amber-400/10">Демо · примеры данных · изменения не сохраняются</div>;
+  const { auth, syncStatus, syncError, syncLocallySaved, syncConflict, resolveWorkspaceConflict, retrySave, reloadWorkspace, exportWorkspace } = useApp();
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const chooseVersion = async (version: 'local' | 'cloud') => {
+    const confirmed = window.confirm(version === 'local'
+      ? 'Сохранить данные с этого устройства в Telegram? Текущая облачная версия будет заменена. Перед продолжением скачайте копию, если нужно сохранить обе версии.'
+      : 'Использовать облачную версию? Текущие изменения на этом устройстве будут заменены. Перед продолжением скачайте копию, если нужно сохранить обе версии.');
+    if (!confirmed) return;
+    setBusy(true); setActionError('');
+    try { await resolveWorkspaceConflict(version); }
+    catch (error) { setActionError(error instanceof Error ? error.message : 'Не удалось выбрать версию. Повторите попытку.'); }
+    finally { setBusy(false); }
+  };
+  if (auth.mode === 'demo') return <div className="text-center text-[11px] text-white/50 py-1">Демо-пространство · изменения не сохраняются</div>;
   if (auth.mode !== 'telegram') return null;
   const failed = syncStatus === 'error';
+  const saving = syncStatus === 'saving';
   return (
-    <div className={failed ? 'bg-amber-400/10 border-b border-amber-400/20 px-4 py-3' : 'border-b border-border px-4 py-2'} role={failed ? 'alert' : 'status'} aria-live="polite">
-      <div className="flex items-center justify-center gap-2 text-xs">
-        {failed ? <AlertCircle className="w-4 h-4 text-amber-300" /> : syncStatus === 'saving' ? <CloudUpload className="w-4 h-4 text-accent-400 animate-pulse" /> : <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-        <span className={failed ? 'text-amber-200' : 'text-white/50'}>{failed ? syncError : syncStatus === 'saving' ? 'Сохраняем в Telegram… Не закрывай приложение.' : syncStatus === 'saved' ? 'Сохранено в Telegram' : 'Telegram подключён'}</span>
-        <span className="text-white/25 ml-2 shrink-0">{APP_VERSION}</span>
+    <div className={failed ? 'liquid-panel rounded-2xl border border-amber-300/25 px-3.5 py-3' : 'px-1 py-1'}>
+      <div className="flex items-center gap-2 text-[11px]" role="status" aria-live="polite">
+        {failed ? <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-200" /> : saving ? <CloudUpload className="w-3.5 h-3.5 shrink-0 text-accent-300 animate-pulse" /> : <CheckCircle2 className="w-3 h-3 text-emerald-300/80" />}
+        <span className={failed ? 'text-amber-100 flex-1' : 'text-white/55 flex-1'}>{failed ? syncConflict ? 'Нужно выбрать актуальную версию' : syncLocallySaved ? 'На устройстве сохранено · ожидает синхронизации' : 'Есть несохранённые изменения' : saving ? 'Синхронизация…' : syncStatus === 'saved' ? 'Всё сохранено в Telegram' : 'Telegram подключён'}</span>
+        {failed && <button type="button" className="text-amber-100 underline underline-offset-4 py-1" aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>{expanded ? 'Свернуть' : 'Подробнее'}</button>}
       </div>
-      {failed && <div className="flex flex-wrap justify-center gap-2 mt-3">
-        <Button size="sm" variant="secondary" onClick={() => void retrySave().catch(() => {})}><RefreshCw className="w-3 h-3" /> Повторить</Button>
-        <Button size="sm" variant="ghost" onClick={exportWorkspace}><Download className="w-3 h-3" /> Скачать копию</Button>
-        <Button size="sm" variant="ghost" onClick={() => {
-          if (window.confirm('Загрузить облачную версию? Несохранённые изменения на этом экране будут заменены. Сначала можно скачать копию.')) void reloadWorkspace();
-        }}>Загрузить облачную версию</Button>
+      {failed && expanded && <div className="mt-3">
+        <p className="text-xs leading-relaxed text-white/65">{syncError}</p>
+        {actionError && <p className="text-xs text-amber-200 mt-2" role="alert">{actionError}</p>}
+        <div className="flex flex-wrap gap-2 mt-3">
+          <Button size="sm" variant="secondary" disabled={busy} onClick={async () => { setBusy(true); try { await retrySave(); } catch { /* Error remains visible. */ } finally { setBusy(false); } }}><RefreshCw className="w-3 h-3" /> {busy ? 'Повторяем…' : 'Повторить'}</Button>
+          <Button size="sm" variant="ghost" onClick={exportWorkspace}><Download className="w-3 h-3" /> Скачать копию</Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void reloadWorkspace()}>Проверить облако</Button>
+        </div>
+        {syncConflict && <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/10">
+          <Button size="sm" disabled={busy} onClick={() => void chooseVersion('local')}>Сохранить эту версию</Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => void chooseVersion('cloud')}>Использовать облачную</Button>
+        </div>}
       </div>}
     </div>
   );

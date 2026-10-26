@@ -28,10 +28,14 @@ export function formatTime(iso: string): string {
   return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function relativeDate(iso: string): string {
-  const now = new Date();
-  const d = new Date(iso);
-  const diffMs = d.getTime() - now.getTime();
+export function localDateValue(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export function relativeDate(iso: string, now = new Date()): string {
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso);
+  const day = (value: Date) => Date.UTC(value.getFullYear(), value.getMonth(), value.getDate());
+  const diffMs = day(d) - day(now);
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
   if (diffDays === 0) return 'Сегодня';
   if (diffDays === 1) return 'Завтра';

@@ -23,11 +23,11 @@ const navItems: { page: Page; label: string; icon: typeof LayoutDashboard }[] = 
 
 export function Sidebar({ current, onNavigate, businessName }: SidebarProps) {
   return (
-    <aside className="hidden lg:flex flex-col w-64 shrink-0 border-r border-border bg-bg-surface h-screen sticky top-0">
-      <div className="p-5 border-b border-border">
+    <aside className="hidden lg:flex flex-col w-60 shrink-0 liquid-panel rounded-[28px] h-[calc(100dvh-2rem)] sticky top-4 m-4 mr-0">
+      <div className="px-6 py-6 border-b border-white/10">
         <Logo />
       </div>
-      <nav className="flex-1 overflow-y-auto no-scrollbar py-4 px-3 space-y-1">
+      <nav aria-label="Основная навигация" className="flex-1 overflow-y-auto no-scrollbar py-5 px-3 space-y-1">
         {navItems.map(item => {
           const active = current === item.page;
           const Icon = item.icon;
@@ -38,22 +38,22 @@ export function Sidebar({ current, onNavigate, businessName }: SidebarProps) {
               aria-current={active ? 'page' : undefined}
               onClick={() => onNavigate(item.page)}
               className={cn(
-                'w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative group',
-                active ? 'bg-accent-500/10 text-white' : 'text-white/55 hover:text-white hover:bg-bg-hover',
+                'w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-sm font-medium transition-colors duration-200 relative group',
+                active ? 'liquid-control text-white' : 'text-white/65 hover:text-white hover:bg-white/5',
               )}
             >
-              {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-accent-500" />}
               <Icon className={cn('w-[18px] h-[18px] shrink-0', active && 'text-accent-400')} />
               {item.label}
             </button>
           );
         })}
-        <div className="h-px bg-border my-3" />
+        <div className="h-px bg-white/10 my-3" />
         <button
           onClick={() => onNavigate('settings')}
+          aria-current={current === 'settings' ? 'page' : undefined}
           className={cn(
-            'w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
-            current === 'settings' ? 'bg-accent-500/10 text-white' : 'text-white/55 hover:text-white hover:bg-bg-hover',
+            'w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-sm font-medium transition-colors duration-200',
+            current === 'settings' ? 'liquid-control text-white' : 'text-white/65 hover:text-white hover:bg-white/5',
           )}
         >
           <Settings className="w-[18px] h-[18px] shrink-0" />
@@ -61,7 +61,7 @@ export function Sidebar({ current, onNavigate, businessName }: SidebarProps) {
         </button>
       </nav>
       {businessName && (
-        <div className="p-4 border-t border-border">
+        <div className="p-5 border-t border-white/10">
           <div className="flex items-center gap-2.5 px-2">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-500/30 to-accent-700/20 border border-accent-500/30 flex items-center justify-center text-xs font-bold text-accent-300">
               {businessName.slice(0, 1)}
@@ -90,37 +90,42 @@ const bottomItems: { page: Page; label: string; icon: typeof LayoutDashboard }[]
 ];
 
 export function BottomNav({ current, onNavigate }: BottomNavProps) {
+  const moreActive = !bottomItems.some(item => item.page === current);
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 glass-strong border-t border-border">
-      <div className="flex items-center justify-around px-2 py-1.5 safe-area-inset-bottom">
+    <nav aria-label="Основная навигация" className="liquid-dock lg:hidden z-40 glass-strong">
+      <div className="grid grid-cols-5 gap-1 p-1.5">
         {bottomItems.map(item => {
           const active = current === item.page;
           const Icon = item.icon;
           return (
             <button
               key={item.page}
+              type="button"
+              aria-current={active ? 'page' : undefined}
               onClick={() => onNavigate(item.page)}
               className={cn(
-                'flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors min-w-[3.5rem]',
-                active ? 'text-accent-400' : 'text-white/50',
+                'dock-item flex flex-col items-center justify-center gap-1 px-1 py-2 transition-colors',
+                active ? 'dock-item-active' : 'hover:text-white hover:bg-white/5',
               )}
             >
-              <Icon className="w-[20px] h-[20px]" />
-              <span className="text-2xs font-medium">{item.label}</span>
+              <Icon aria-hidden="true" className="w-5 h-5" strokeWidth={active ? 2 : 1.7} />
+              <span className="text-[10px] font-medium tracking-[-0.01em]">{item.label}</span>
             </button>
           );
         })}
         <button
+          type="button"
+          aria-current={moreActive ? 'page' : undefined}
           onClick={() => onNavigate('settings')}
-          className={cn('flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors min-w-[3.5rem]', current === 'settings' ? 'text-accent-400' : 'text-white/50')}
+          className={cn('dock-item flex flex-col items-center justify-center gap-1 px-1 py-2 transition-colors', moreActive ? 'dock-item-active' : 'hover:text-white hover:bg-white/5')}
         >
-          <div className="grid grid-cols-2 gap-0.5 w-[20px] h-[20px]">
+          <div aria-hidden="true" className="grid grid-cols-2 gap-[3px] w-[18px] h-[18px]">
             <div className="rounded-sm bg-current" />
             <div className="rounded-sm bg-current" />
             <div className="rounded-sm bg-current" />
             <div className="rounded-sm bg-current" />
           </div>
-          <span className="text-2xs font-medium">Ещё</span>
+          <span className="text-[10px] font-medium">Ещё</span>
         </button>
       </div>
     </nav>

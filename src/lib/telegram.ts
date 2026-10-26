@@ -1,7 +1,7 @@
 import type { CloudStorage } from './cloudWorkspace';
 
 export const BOT_URL = 'https://t.me/Biznowbox_bot?startapp';
-export const APP_VERSION = '2.1-plans';
+export const APP_VERSION = '2.2-admin';
 
 export interface TelegramWebApp {
   initData: string;

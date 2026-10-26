@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { Bell, LogOut, User, Settings, CreditCard, ChevronDown, Menu, X, Wallet, FileText, Users, CheckSquare, UserCog, Calendar, Briefcase } from 'lucide-react';
 import type { Page, AppNotification } from '@/types';
 import { useApp } from '@/store/AppContext';
@@ -6,7 +6,9 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Dropdown, DropdownItem } from '@/components/ui/Misc';
 import { Sidebar, BottomNav } from '@/components/Navigation';
+import { SyncBanner } from '@/components/WorkspaceStatus';
 import { relativeDate } from '@/lib/format';
+import { getVisibleNotifications } from '@/lib/notificationPreferences';
 import { cn } from '@/lib/cn';
 
 interface TopbarProps {
@@ -32,9 +34,10 @@ const notifColors: Record<AppNotification['type'], string> = {
 };
 
 export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
-  const { state, logout, markNotificationRead, markAllNotificationsRead } = useApp();
+  const { state, logout, markNotificationRead } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const unread = state.notifications.filter(n => !n.read).length;
+  const notifications = getVisibleNotifications(state.notifications, state.user?.notificationPreferences);
+  const unread = notifications.filter(n => !n.read).length;
 
   const moreItems: { page: Page; label: string; icon: typeof Wallet }[] = [
     { page: 'documents', label: 'Документы', icon: FileText },
@@ -47,49 +50,47 @@ export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-30 glass border-b border-border">
-        <div className="flex items-center justify-between px-4 sm:px-6 h-16">
+      <header className="app-topbar sticky z-30 glass mx-3 mt-3 sm:mx-6 rounded-[24px]">
+        <div className="flex items-center justify-between gap-3 px-3 sm:px-4 h-16">
           <div className="flex items-center gap-3 min-w-0">
-            <button className="lg:hidden text-white/60 hover:text-white" onClick={() => setMobileMenuOpen(true)}>
+            <button type="button" aria-label="Открыть меню" aria-expanded={mobileMenuOpen} className="liquid-control lg:hidden w-10 h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white" onClick={() => setMobileMenuOpen(true)}>
               <Menu className="w-5 h-5" />
             </button>
-            {businessName && (
-              <div className="hidden sm:flex items-center gap-2">
-                <span className="text-sm text-white/40">Бизнес:</span>
-                <span className="text-sm font-medium text-white truncate">{businessName}</span>
-              </div>
-            )}
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold tracking-[0.16em] text-white/55">BIZBOX</p>
+              <p className="text-sm font-medium text-white truncate max-w-[36vw] sm:max-w-sm">{businessName || 'Мой бизнес'}</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
             <Dropdown
               trigger={
-                <button className="relative w-10 h-10 rounded-xl hover:bg-bg-hover flex items-center justify-center text-white/60 hover:text-white transition-colors">
+                <button type="button" aria-label={unread > 0 ? `Уведомления: ${unread} непрочитанных` : 'Уведомления'} className="relative w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition-colors">
                   <Bell className="w-[18px] h-[18px]" />
                   {unread > 0 && (
                     <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-danger-500 text-white text-[9px] font-bold flex items-center justify-center">
-                      {unread}
+                      {unread > 9 ? '9+' : unread}
                     </span>
                   )}
                 </button>
               }
-              className="w-80 max-w-[calc(100vw-2rem)]"
+              className="w-80 max-w-[calc(100vw-7rem)] sm:max-w-[calc(100vw-2rem)]"
             >
-              {(close) => (
+              {() => (
                 <div>
                   <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border">
                     <span className="text-sm font-semibold text-white">Уведомления</span>
                     {unread > 0 && (
-                      <button onClick={() => markAllNotificationsRead()} className="text-2xs text-accent-400 hover:text-accent-300">
+                      <button onClick={() => notifications.filter(n => !n.read).forEach(n => markNotificationRead(n.id))} className="text-2xs text-accent-400 hover:text-accent-300">
                         Прочитать все
                       </button>
                     )}
                   </div>
                   <div className="max-h-80 overflow-y-auto">
-                    {state.notifications.length === 0 ? (
+                    {notifications.length === 0 ? (
                       <div className="py-8 text-center text-sm text-white/40">Нет уведомлений</div>
                     ) : (
-                      state.notifications.slice(0, 8).map(n => {
+                      notifications.slice(0, 8).map(n => {
                         const Icon = notifIcons[n.type];
                         return (
                           <button
@@ -117,7 +118,7 @@ export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
 
             <Dropdown
               trigger={
-                <button className="flex items-center gap-2 h-10 pl-1 pr-2 sm:pr-3 rounded-xl hover:bg-bg-hover transition-colors">
+                <button type="button" aria-label="Меню профиля" className="flex items-center gap-2 h-11 p-0.5 sm:pr-3 rounded-full hover:bg-white/10 transition-colors">
                   <Avatar name={userName || 'Пользователь'} color="accent" size="sm" />
                   <div className="hidden sm:block text-left">
                     <p className="text-sm font-medium text-white leading-tight max-w-[8rem] truncate">{userName}</p>
@@ -148,17 +149,17 @@ export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setMobileMenuOpen(false)} />
-          <div className="absolute left-0 top-0 bottom-0 w-72 bg-bg-surface border-r border-border p-4 animate-slide-in-right flex flex-col">
+          <div role="dialog" aria-modal="true" aria-label="Меню разделов" className="absolute left-3 top-3 bottom-3 w-[min(19rem,calc(100vw-1.5rem))] liquid-panel rounded-[28px] p-5 animate-fade-in flex flex-col">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center font-bold text-white text-sm">B</div>
                 <span className="font-bold text-white">BIZBOX</span>
               </div>
-              <button onClick={() => setMobileMenuOpen(false)} className="text-white/50 hover:text-white p-1">
+              <button type="button" aria-label="Закрыть меню" onClick={() => setMobileMenuOpen(false)} className="liquid-control rounded-full w-10 h-10 flex items-center justify-center text-white/70 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <nav className="flex-1 space-y-1">
+            <nav aria-label="Все разделы" className="flex-1 space-y-1 overflow-y-auto">
               {moreItems.map(item => {
                 const Icon = item.icon;
                 return (
@@ -193,13 +194,18 @@ interface AppLayoutProps {
 
 export function AppLayout({ current, onNavigate, children }: AppLayoutProps) {
   const { state } = useApp();
+  useLayoutEffect(() => {
+    // Navigation must not retain the previous page's scroll under the sticky bar.
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [current]);
   return (
-    <div className="min-h-screen flex">
+    <div className="app-canvas flex">
       <Sidebar current={current} onNavigate={onNavigate} businessName={state.business?.name} />
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar onNavigate={onNavigate} businessName={state.business?.name} userName={state.user?.name} />
-        <main className="flex-1 p-4 sm:p-6 pb-24 lg:pb-6 max-w-7xl w-full mx-auto">
-          <div key={current} className="animate-fade-in-up">
+        <main className="app-content flex-1 px-4 pt-6 sm:px-6 sm:pt-7 max-w-7xl w-full mx-auto">
+          <SyncBanner />
+          <div key={current} className="animate-fade-in">
             {children}
           </div>
         </main>

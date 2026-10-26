@@ -5,25 +5,25 @@ export default {
     extend: {
       colors: {
         bg: {
-          base: '#070A12',
-          surface: '#0C1322',
-          card: '#10182B',
-          hover: '#16213A',
-          raised: '#1A2540',
+          base: '#080E1B',
+          surface: '#131D30',
+          card: '#1A263B',
+          hover: '#283750',
+          raised: '#26354F',
         },
         border: {
-          DEFAULT: '#1E2A44',
-          strong: '#2A3A5C',
-          subtle: '#16213A',
+          DEFAULT: '#344158',
+          strong: '#52617A',
+          subtle: '#26354A',
         },
         accent: {
           50: '#E6F0FF',
           100: '#CCE0FF',
           200: '#99C2FF',
           300: '#66A3FF',
-          400: '#3385FF',
-          500: '#0066FF',
-          600: '#0052CC',
+          400: '#8AB7FF',
+          500: '#4D8EF7',
+          600: '#3474DF',
           700: '#003D99',
           800: '#002966',
           900: '#001433',
@@ -45,7 +45,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Segoe UI', 'sans-serif'],
       },
       fontSize: {
         '2xs': ['0.6875rem', { lineHeight: '1rem' }],
@@ -53,7 +53,7 @@ export default {
       boxShadow: {
         glow: '0 0 24px rgba(0, 102, 255, 0.25)',
         'glow-sm': '0 0 12px rgba(0, 102, 255, 0.20)',
-        card: '0 1px 2px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.25)',
+        card: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 12px 36px rgba(0,5,18,0.16)',
         'card-hover': '0 8px 30px rgba(0,0,0,0.35)',
       },
       keyframes: {

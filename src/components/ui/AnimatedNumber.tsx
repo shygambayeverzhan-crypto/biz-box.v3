@@ -15,6 +15,10 @@ export function AnimatedNumber({ value, duration = 900, format, className }: Ani
 
   useEffect(() => {
     cancelAnimationFrame(rafRef.current!);
+    if (duration <= 0 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplay(value);
+      return;
+    }
     fromRef.current = display;
     startRef.current = 0;
 

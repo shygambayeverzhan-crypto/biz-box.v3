@@ -8,6 +8,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Input';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '@/lib/seed';
 import type { TransactionType } from '@/types';
 import { cn } from '@/lib/cn';
+import { localDateValue } from '@/lib/format';
 
 interface NewOperationModalProps {
   open: boolean;
@@ -27,13 +28,13 @@ export function NewOperationModal({ open, onClose }: NewOperationModalProps) {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localDateValue());
 
   const cats = type === 'income' ? INCOME_CATEGORIES : type === 'expense' ? EXPENSE_CATEGORIES : ['Основной счёт', 'Резервный фонд'];
 
   const handleSubmit = () => {
     const amt = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
-    if (!amt || amt <= 0) {
+    if (!Number.isFinite(amt) || amt <= 0) {
       toast.error('Введите сумму', 'Сумма должна быть больше нуля.');
       return;
     }

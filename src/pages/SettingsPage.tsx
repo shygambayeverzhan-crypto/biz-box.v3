@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { User, Briefcase, Bell, Shield, CreditCard, Save, LogOut, Download, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import { useToast } from '@/store/ToastContext';
-import type { Page, PaymentRequest, PaymentStatus } from '@/types';
+import type { Page, PaymentRequest, PaymentStatus, NotificationType } from '@/types';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -13,6 +13,7 @@ import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/format';
 import { APP_VERSION } from '@/lib/telegram';
 import { PLANS, PAYMENT_CONTACT } from '@/lib/billing';
+import { getNotificationPreferences } from '@/lib/notificationPreferences';
 
 const planNames: Record<string, string> = { free: 'FREE', business: 'BUSINESS', pro: 'PRO' };
 
@@ -26,8 +27,7 @@ const sections = [
 ];
 
 export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
-  const { state, auth, updateUser, updateBusiness, logout, confirmPayment, rejectPayment, exportWorkspace } = useApp();
-  const toast = useToast();
+  const { auth, logout } = useApp();
   const [section, setSection] = useState('profile');
 
   return (
@@ -37,13 +37,14 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Section nav */}
         <div className="lg:w-56 shrink-0">
-          <div className="flex lg:flex-col gap-1 overflow-x-auto no-scrollbar">
+          <div className="liquid-inset p-1.5 rounded-3xl grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-col gap-1" aria-label="Разделы настроек">
             {sections.filter(s => s.id !== 'admin' || auth.mode === 'demo').map(s => {
               const Icon = s.icon;
               return (
                 <button key={s.id} onClick={() => setSection(s.id)}
-                  className={cn('flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap',
-                    section === s.id ? 'bg-accent-500/10 text-accent-300' : 'text-white/50 hover:text-white hover:bg-bg-hover')}>
+                  aria-current={section === s.id ? 'page' : undefined}
+                  className={cn('flex items-center gap-2 px-3 py-3 rounded-2xl text-xs font-medium transition-all whitespace-nowrap',
+                    section === s.id ? 'glass text-white shadow-sm' : 'text-white/60 hover:text-white hover:bg-bg-hover')}>
                   <Icon className="w-4 h-4" /> {s.label}
                 </button>
               );
@@ -66,14 +67,23 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
       <p className="text-[11px] text-white/25 text-center">BizBox · {APP_VERSION}</p>
     </div>
   );
+}
 
   function ProfileSection() {
+    const { state, updateUser, retrySave } = useApp();
+    const toast = useToast();
     const [name, setName] = useState(state.user?.name || '');
     const [email, setEmail] = useState(state.user?.email || '');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
 
-    const handleSave = () => {
-      updateUser({ name, email });
-      toast.success('Профиль обновлён');
+    const handleSave = async () => {
+      if (!name.trim()) { setError('Укажите имя.'); return; }
+      setSaving(true); setError('');
+      updateUser({ name: name.trim(), email: email.trim() });
+      try { await retrySave(); toast.success('Профиль сохранён'); }
+      catch (e) { setError(e instanceof Error ? e.message : 'Не удалось синхронизировать профиль. Повторите сохранение.'); }
+      finally { setSaving(false); }
     };
 
     return (
@@ -86,65 +96,82 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
             <p className="text-xs text-white/40">{email}</p>
           </div>
         </div>
-        <div className="space-y-4">
-          <Field label="Имя"><Input value={name} onChange={e => setName(e.target.value)} /></Field>
-          <Field label="Email"><Input type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
-          <Button onClick={handleSave}><Save className="w-4 h-4" /> Сохранить</Button>
-        </div>
+        <form className="space-y-4" onSubmit={e => { e.preventDefault(); void handleSave(); }}>
+          <Field label="Имя" htmlFor="profile-name"><Input id="profile-name" required disabled={saving} maxLength={120} autoComplete="name" value={name} onChange={e => setName(e.target.value)} /></Field>
+          <Field label="Email" htmlFor="profile-email"><Input id="profile-email" type="email" disabled={saving} autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
+          {error && <p role="alert" className="text-sm text-amber-200">{error}</p>}
+          <Button type="submit" disabled={saving}><Save className="w-4 h-4" /> {saving ? 'Сохраняем…' : 'Сохранить'}</Button>
+        </form>
       </Card>
     );
   }
 
   function BusinessSection() {
+    const { state, updateBusiness, retrySave } = useApp();
+    const toast = useToast();
     const [name, setName] = useState(state.business?.name || '');
     const [industry, setIndustry] = useState(state.business?.industry || '');
     const [city, setCity] = useState(state.business?.city || '');
     const [employees, setEmployees] = useState(state.business?.employeesCount || '');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
 
-    const handleSave = () => {
-      updateBusiness({ name, industry, city, employeesCount: employees });
-      toast.success('Данные бизнеса обновлены');
+    const handleSave = async () => {
+      if (![name, industry, city, employees].every(v => v.trim())) { setError('Заполните название, сферу, город и количество сотрудников.'); return; }
+      setSaving(true); setError('');
+      updateBusiness({ name: name.trim(), industry: industry.trim(), city: city.trim(), employeesCount: employees });
+      try { await retrySave(); toast.success('Данные бизнеса сохранены'); }
+      catch (e) { setError(e instanceof Error ? e.message : 'Не удалось синхронизировать данные. Повторите сохранение.'); }
+      finally { setSaving(false); }
     };
 
     return (
       <Card className="p-5 sm:p-6">
         <h3 className="text-base font-semibold text-white mb-5">Информация о бизнесе</h3>
         <div className="space-y-4">
-          <Field label="Название бизнеса"><Input value={name} onChange={e => setName(e.target.value)} /></Field>
+          <Field label="Название бизнеса" htmlFor="business-name"><Input id="business-name" disabled={saving} value={name} onChange={e => setName(e.target.value)} /></Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Сфера"><Input value={industry} onChange={e => setIndustry(e.target.value)} /></Field>
-            <Field label="Город"><Input value={city} onChange={e => setCity(e.target.value)} /></Field>
+            <Field label="Сфера" htmlFor="business-industry"><Input id="business-industry" disabled={saving} value={industry} onChange={e => setIndustry(e.target.value)} /></Field>
+            <Field label="Город" htmlFor="business-city"><Input id="business-city" disabled={saving} value={city} onChange={e => setCity(e.target.value)} /></Field>
           </div>
-          <Field label="Количество сотрудников">
-            <Select value={employees} onChange={e => setEmployees(e.target.value)} options={[{ value: '1', label: 'Только я' }, { value: '2-5', label: '2–5' }, { value: '6-15', label: '6–15' }, { value: '16-50', label: '16–50' }, { value: '50+', label: '50+' }]} placeholder="Выберите" />
+          <Field label="Количество сотрудников" htmlFor="business-employees">
+            <Select id="business-employees" disabled={saving} value={employees} onChange={e => setEmployees(e.target.value)} options={[{ value: '1', label: 'Только я' }, { value: '2-5', label: '2–5' }, { value: '6-15', label: '6–15' }, { value: '16-50', label: '16–50' }, { value: '50+', label: '50+' }]} placeholder="Выберите" />
           </Field>
-          <Button onClick={handleSave}><Save className="w-4 h-4" /> Сохранить</Button>
+          {error && <p role="alert" className="text-sm text-amber-200">{error}</p>}
+          <Button disabled={saving} onClick={() => void handleSave()}><Save className="w-4 h-4" /> {saving ? 'Сохраняем…' : 'Сохранить'}</Button>
         </div>
       </Card>
     );
   }
 
   function NotificationsSection() {
-    const [settings, setSettings] = useState({
-      payments: true, tasks: true, clients: true, documents: true, marketing: false,
-    });
+    const { state, updateUser, retrySave } = useApp();
+    const toast = useToast();
+    const settings = getNotificationPreferences(state.user?.notificationPreferences);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
 
-    const items = [
-      { key: 'payments', label: 'Платежи', desc: 'Уведомления о счетах и оплатах' },
-      { key: 'tasks', label: 'Задачи', desc: 'Напоминания о дедлайнах' },
-      { key: 'clients', label: 'Клиенты', desc: 'Новые клиенты и активности' },
-      { key: 'documents', label: 'Документы', desc: 'Статусы документов' },
-      { key: 'marketing', label: 'Маркетинг', desc: 'Новости и акции BIZBOX' },
+    const items: { key: NotificationType; label: string; desc: string }[] = [
+      { key: 'payment', label: 'Платежи', desc: 'Счета и оплаты' },
+      { key: 'task', label: 'Задачи', desc: 'События по задачам' },
+      { key: 'client', label: 'Клиенты', desc: 'Новые клиенты и активности' },
+      { key: 'document', label: 'Документы', desc: 'Статусы документов' },
+      { key: 'system', label: 'Системные', desc: 'Сообщения BizBox' },
     ];
 
-    const toggle = (key: string) => {
-      setSettings(s => ({ ...s, [key]: !s[key as keyof typeof s] }));
-      toast.success('Настройки сохранены');
+    const toggle = async (key: NotificationType) => {
+      setSaving(true); setError('');
+      updateUser({ notificationPreferences: { ...settings, [key]: !settings[key] } });
+      try { await retrySave(); toast.success('Настройки сохранены'); }
+      catch { setError('Изменение применено. Облачное сохранение ещё не завершено — повторите синхронизацию.'); }
+      finally { setSaving(false); }
     };
 
     return (
       <Card className="p-5 sm:p-6">
-        <h3 className="text-base font-semibold text-white mb-5">Уведомления</h3>
+        <h3 className="text-base font-semibold text-white mb-2">Уведомления в приложении</h3>
+        <p className="text-xs text-white/60 mb-4">Выберите, что показывать под значком колокольчика. Сообщения самого Telegram настраиваются в Telegram.</p>
+        {error && <p role="alert" className="text-xs text-amber-200 mb-3">{error}</p>}
         <div className="space-y-1">
           {items.map(item => (
             <div key={item.key} className="flex items-center justify-between py-3.5 border-b border-border/subtle last:border-0">
@@ -152,7 +179,7 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
                 <p className="text-sm font-medium text-white">{item.label}</p>
                 <p className="text-2xs text-white/40 mt-0.5">{item.desc}</p>
               </div>
-              <button onClick={() => toggle(item.key)}
+              <button type="button" disabled={saving} role="switch" aria-checked={settings[item.key]} aria-label={item.label} onClick={() => void toggle(item.key)}
                 className={cn('relative w-11 h-6 rounded-full transition-colors', settings[item.key as keyof typeof settings] ? 'bg-accent-500' : 'bg-bg-raised')}>
                 <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform', settings[item.key as keyof typeof settings] ? 'translate-x-5' : 'translate-x-0.5')} />
               </button>
@@ -164,6 +191,7 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
   }
 
   function SecuritySection() {
+    const { auth, exportWorkspace } = useApp();
     return (
       <div className="space-y-6">
         <Card className="p-5 sm:p-6">
@@ -191,6 +219,8 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
   }
 
   function AdminSection() {
+    const { state, confirmPayment, rejectPayment } = useApp();
+    const toast = useToast();
     const payments = state.payments;
     const pending = payments.filter(p => p.status === 'awaiting_confirmation' || p.status === 'under_review');
 
@@ -272,7 +302,6 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
       </div>
     );
   }
-}
 function SubscriptionSection({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const { state, auth, subscriptionAccess, paymentRequest, billingStatus, billingError } = useApp();
   const plan = state.user?.plan || 'free';
@@ -301,10 +330,10 @@ function SubscriptionSection({ onNavigate }: { onNavigate: (p: Page) => void }) 
       </Card>
 
       {paymentRequest && (
-        <Card className="p-5 border-warning-500/30">
+        <Card className={cn('p-5', paymentRequest.status === 'approved' ? 'border-success-500/30' : paymentRequest.status === 'rejected' ? 'border-danger-500/30' : 'border-warning-500/30')}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-warning-500/10 text-warning-400 flex items-center justify-center shrink-0">
-              <Clock className="w-5 h-5" />
+            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', paymentRequest.status === 'approved' ? 'bg-success-500/10 text-success-400' : paymentRequest.status === 'rejected' ? 'bg-danger-500/10 text-danger-400' : 'bg-warning-500/10 text-warning-400')}>
+              {paymentRequest.status === 'approved' ? <CheckCircle2 className="w-5 h-5" /> : paymentRequest.status === 'rejected' ? <XCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
             </div>
             <div className="flex-1">
               <p className="text-sm font-medium text-white">{paymentRequest.status === 'approved' ? 'Оплата подтверждена' : paymentRequest.status === 'rejected' ? 'Оплата не подтверждена' : paymentRequest.receiptReceived ? 'Чек получен' : 'Прикрепи чек к заявке'}</p>

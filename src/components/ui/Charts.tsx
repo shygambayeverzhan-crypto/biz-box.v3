@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { cn } from '@/lib/cn';
+import { chartPoints } from '@/lib/chartGeometry';
 
 interface LineChartProps {
   data: { label: string; value: number }[];
@@ -10,12 +11,15 @@ interface LineChartProps {
   className?: string;
 }
 
-export function LineChart({ data, height = 200, color = '#0066FF', gradientId = 'rev-grad', formatValue, className }: LineChartProps) {
+export function LineChart({ data, height = 200, color = '#78AEFF', gradientId, formatValue, className }: LineChartProps) {
+  const chartId = useId();
+  const fillId = gradientId || `chart-${chartId.replace(/:/g, '')}`;
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setProgress(1); return; }
     setProgress(0);
     const start = performance.now();
     const dur = 1000;
@@ -29,31 +33,21 @@ export function LineChart({ data, height = 200, color = '#0066FF', gradientId = 
   }, [data]);
 
   const width = 600;
-  const padX = 10;
-  const padY = 20;
-  const max = Math.max(...data.map(d => d.value), 1);
-  const min = Math.min(...data.map(d => d.value), 0);
-  const range = max - min || 1;
+  const padX = 12;
+  const padY = 18;
 
-  const points = data.map((d, i) => {
-    const x = padX + (i / (data.length - 1)) * (width - padX * 2);
-    const y = padY + (1 - (d.value - min) / range) * (height - padY * 2);
-    return { x, y, ...d };
-  });
-
-  const animatedPoints = points.map(p => ({
-    ...p,
-    y: padY + (1 - progress * (1 - (p.value - min) / range)) * (height - padY * 2),
-  }));
+  const points = chartPoints(data, width, height);
+  const animatedPoints = chartPoints(data, width, height, progress);
+  const activePoint = hoverIdx === null ? null : points[hoverIdx];
 
   const linePath = animatedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
   const areaPath = `${linePath} L ${animatedPoints[animatedPoints.length - 1]?.x ?? 0} ${height - padY} L ${animatedPoints[0]?.x ?? 0} ${height - padY} Z`;
 
   return (
-    <div className={cn('relative w-full', className)} style={{ height }}>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none">
+    <div className={cn('relative w-full pb-7', className)}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible" style={{ height }} preserveAspectRatio="none" role="img" aria-label={`Выручка по месяцам: ${data.map(d => `${d.label}: ${formatValue ? formatValue(d.value) : d.value}`).join(', ')}`}>
         <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.3" />
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
@@ -61,12 +55,12 @@ export function LineChart({ data, height = 200, color = '#0066FF', gradientId = 
         {[0.25, 0.5, 0.75].map(f => (
           <line key={f} x1={padX} x2={width - padX} y1={padY + f * (height - padY * 2)} y2={padY + f * (height - padY * 2)} stroke="#1E2A44" strokeWidth="1" strokeDasharray="4 4" opacity={0.5} />
         ))}
-        <path d={areaPath} fill={`url(#${gradientId})`} />
+        <path d={areaPath} fill={`url(#${fillId})`} />
         <path d={linePath} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         {animatedPoints.map((p, i) => (
           <g key={i}>
             <rect x={p.x - (width - padX * 2) / data.length / 2} y={0} width={(width - padX * 2) / data.length} height={height} fill="transparent"
-              onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)} />
+              onPointerDown={() => setHoverIdx(i)} onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)} />
             {hoverIdx === i && (
               <>
                 <line x1={p.x} x2={p.x} y1={padY} y2={height - padY} stroke={color} strokeWidth="1" opacity={0.4} />
@@ -77,16 +71,16 @@ export function LineChart({ data, height = 200, color = '#0066FF', gradientId = 
           </g>
         ))}
       </svg>
-      {hoverIdx !== null && progress === 1 && (
+      {activePoint && progress === 1 && (
         <div
           className="absolute pointer-events-none glass-strong border border-border-strong rounded-lg px-3 py-2 text-xs whitespace-nowrap z-10 -translate-x-1/2"
-          style={{ left: `${(points[hoverIdx].x / width) * 100}%`, top: 4 }}
+          style={{ left: `${Math.max(18, Math.min(82, activePoint.x / width * 100))}%`, top: 4 }}
         >
-          <div className="text-white/50">{data[hoverIdx].label}</div>
-          <div className="text-white font-semibold mt-0.5">{formatValue ? formatValue(data[hoverIdx].value) : data[hoverIdx].value}</div>
+          <div className="text-white/60">{activePoint.label}</div>
+          <div className="text-white font-semibold mt-0.5">{formatValue ? formatValue(activePoint.value) : activePoint.value}</div>
         </div>
       )}
-      <div className="flex justify-between mt-2 px-1">
+      <div className="absolute bottom-0 inset-x-0 flex justify-between px-1">
         {data.map((d, i) => (
           <span key={i} className="text-2xs text-white/40">{d.label}</span>
         ))}

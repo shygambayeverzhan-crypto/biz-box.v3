@@ -57,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[200] flex flex-col gap-2 max-w-sm w-[calc(100vw-2rem)] sm:w-auto pointer-events-none">
+      <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] lg:bottom-6 right-4 z-[200] flex flex-col gap-2 max-w-sm w-[calc(100vw-2rem)] sm:w-auto pointer-events-none" aria-live="polite">
         {toasts.map(t => {
           const Icon = icons[t.type];
           return (

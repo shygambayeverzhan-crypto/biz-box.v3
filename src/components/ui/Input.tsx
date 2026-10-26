@@ -3,28 +3,29 @@ import { cn } from '@/lib/cn';
 
 interface FieldProps {
   label?: string;
+  htmlFor?: string;
   error?: string;
   hint?: string;
   required?: boolean;
   children: ReactNode;
 }
 
-export function Field({ label, error, hint, required, children }: FieldProps) {
+export function Field({ label, htmlFor, error, hint, required, children }: FieldProps) {
   return (
     <div className="space-y-1.5">
       {label && (
-        <label className="block text-xs font-medium text-white/60">
+        <label htmlFor={htmlFor} className="block text-xs font-medium text-white/75">
           {label} {required && <span className="text-danger-400">*</span>}
         </label>
       )}
       {children}
-      {hint && !error && <p className="text-2xs text-white/40">{hint}</p>}
+      {hint && !error && <p className="text-2xs text-white/60">{hint}</p>}
       {error && <p className="text-2xs text-danger-400">{error}</p>}
     </div>
   );
 }
 
-const baseInput = 'w-full h-10 px-3.5 rounded-xl bg-bg-base border border-border text-sm text-white placeholder-white/30 transition-colors focus:outline-none focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/20';
+const baseInput = 'liquid-inset w-full h-12 px-4 rounded-2xl text-sm text-white placeholder-white/45 transition-colors focus:outline-none focus:border-accent-400/70 focus:ring-2 focus:ring-accent-400/20 disabled:opacity-50';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => <input ref={ref} className={cn(baseInput, className)} {...props} />,

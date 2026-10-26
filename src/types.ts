@@ -113,6 +113,7 @@ export interface Specialist {
 }
 
 export type NotificationType = 'payment' | 'task' | 'client' | 'document' | 'system';
+export type NotificationPreferences = Record<NotificationType, boolean>;
 
 export interface AppNotification {
   id: string;
@@ -135,6 +136,7 @@ export interface UserProfile {
   name: string;
   email: string;
   plan: 'free' | 'business' | 'pro';
+  notificationPreferences?: Partial<NotificationPreferences>;
 }
 
 export type PaymentStatus =

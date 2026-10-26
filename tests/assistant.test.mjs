@@ -60,6 +60,8 @@ test('Gemini configuration never sends an old OpenAI credential to Google',()=>{
   assert.equal(assistantConnection({OPENAI_API_KEY:'old-secret',BIZ_BOX_API_KEY_AI:'old-secret'}).token,undefined);
   assert.equal(assistantConnection({GEMINI_API_KEY:'google-key'}).token,'google-key');
   assert.equal(assistantConnection({GOOGLE_API_KEY:'google-key'}).token,'google-key');
+  assert.equal(assistantConnection({Gemini_API_Key:'existing-google-key'}).token,'existing-google-key');
+  assert.equal(assistantConnection({GEMINI_API_KEY:'standard',Gemini_API_Key:'legacy'}).token,'standard');
   assert.equal(assistantConnection({GEMINI_MODEL:'gemini-3.5-flash-lite'}).model,'gemini-3.5-flash-lite');
 });
 test('confirmed AI proposals are applied once, including retry after failed sync',()=>{

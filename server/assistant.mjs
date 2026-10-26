@@ -4,7 +4,7 @@ import { HttpError } from './telegram.mjs';
 const MODEL = 'gemini-3.8-flash'; // Verified Google model documentation, 2026-10-27.
 export function assistantConnection(env = process.env) {
   return {
-    token: env.GEMINI_API_KEY || env.GOOGLE_API_KEY,
+    token: env.GEMINI_API_KEY || env.GOOGLE_API_KEY || env.Gemini_API_Key,
     model: env.GEMINI_MODEL || MODEL,
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
   };

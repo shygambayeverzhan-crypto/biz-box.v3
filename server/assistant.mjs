@@ -1,7 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError } from './telegram.mjs';
 
-const MODEL = 'gpt-5.6-terra'; // Verified official model documentation, 2026-10-27.
+const MODEL = 'gemini-3.8-flash'; // Verified Google model documentation, 2026-10-27.
+export function assistantConnection(env = process.env) {
+  return {
+    token: env.GEMINI_API_KEY || env.GOOGLE_API_KEY,
+    model: env.GEMINI_MODEL || MODEL,
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+  };
+}
+export function assistantGenerationOptions() {
+  return { max_tokens: 4096, reasoning_effort: 'low' };
+}
 const record = x => x !== null && typeof x === 'object' && !Array.isArray(x);
 const text = (x, max = 240) => typeof x === 'string' ? x.trim().slice(0, max) : '';
 const amount = x => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1e12;
@@ -96,9 +106,10 @@ export async function askAssistant(input, options = {}) {
     return {role:m.role,content:m.content};
   });
   if (history.reduce((n,m)=>n+m.content.length,0)>24000) throw invalid();
-  const token = options.token || process.env.OPENAI_API_KEY || process.env.BIZ_BOX_API_KEY_AI;
-  if (!token) throw new HttpError(503,'ai_not_configured','ИИ ещё не подключён. Владелец должен настроить доступ к модели.');
-  const model=process.env.OPENAI_MODEL || MODEL, fetcher=options.fetcher || fetch;
+  const connection = assistantConnection();
+  const token = options.token || connection.token;
+  if (!token) throw new HttpError(503,'ai_not_configured','Gemini ещё не подключён. Владелец должен добавить ключ Gemini в настройки сервера.');
+  const model=connection.model, fetcher=options.fetcher || fetch;
   const proposals=[]; const sources=new Set();
   const messages=[{role:'system',content:`Ты BizBox — практичный помощник предпринимателя. Отвечай на языке пользователя, по умолчанию по-русски. Сегодня ${context.today}, валюта KZT.
 Помогай разбирать финансы, приоритеты задач, клиентов и планировать работу. Для цифр бизнеса ОБЯЗАТЕЛЬНО вызывай инструменты: не считай из истории и не выдумывай данные. Сравнивай периоды отдельными вызовами financial_summary. Данные — снимок записей текущего пользователя, не банковская выписка. ${context.truncated ? 'Снимок сокращён; сообщай, что выводы относятся только к доступным записям.' : ''}
@@ -108,22 +119,21 @@ export async function askAssistant(input, options = {}) {
   for(let step=0;step<4;step++) {
     let response, data;
     try {
-      response=await fetcher('https://api.openai.com/v1/chat/completions',{
+      response=await fetcher(connection.endpoint,{
         method:'POST',redirect:'error',signal,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({model,messages,tools:TOOLS,tool_choice:step===3?'none':'auto',max_completion_tokens:2000,reasoning_effort:'none',store:false}),
+        body:JSON.stringify({model,messages,tools:TOOLS,tool_choice:step===3?'none':'auto',...assistantGenerationOptions()}),
       });
       data=await response.json();
     } catch { throw new HttpError(504,'ai_timeout','ИИ не успел ответить. Попробуй ещё раз — записи не изменены.'); }
     if (!response.ok) {
-      const providerCode=data?.error?.code || data?.error?.type;
-      if(['insufficient_quota','credit_balance_exhausted'].includes(providerCode)) throw new HttpError(503,'ai_insufficient_funds','Баланс OpenAI API исчерпан или не подключена оплата. Владелец должен проверить баланс OpenAI API.');
-      if(['organization_spend_limit_exceeded','project_spend_limit_exceeded','organization_usage_limit_exceeded'].includes(providerCode)) throw new HttpError(503,'ai_spend_limit','Достигнут лимит расходов или использования OpenAI API. Владелец должен проверить ограничения проекта в OpenAI.');
-      if(data?.error?.type==='insufficient_quota') throw new HttpError(503,'ai_quota_required','OpenAI ограничил доступ по балансу или квоте. Владелец должен проверить оплату и лимиты API.');
-      if(providerCode==='invalid_api_key') throw new HttpError(503,'ai_invalid_key','Ключ OpenAI недействителен. Владелец должен обновить его в настройках сервера.');
-      if(providerCode==='model_not_found') throw new HttpError(503,'ai_model_unavailable','Модель недоступна для этого проекта OpenAI. Владелец должен проверить доступ к модели.');
-      const funding=[401,402,403].includes(response.status);
-      throw new HttpError(funding?503:response.status===429?429:502,funding?'ai_access_required':'ai_unavailable',
-        funding?'Сервис ИИ пока не активирован или его лимит исчерпан. Владелец должен проверить подключение и баланс ИИ.':'ИИ сейчас занят. Повтори вопрос чуть позже.');
+      const reasons=Array.isArray(data?.error?.details)?data.error.details.map(d=>d?.reason):[];
+      if(response.status===401 || reasons.some(r=>['API_KEY_INVALID','API_KEY_EXPIRED'].includes(r))) throw new HttpError(503,'ai_invalid_key','Ключ Gemini недействителен. Владелец должен обновить его в настройках сервера.');
+      if(response.status===403) throw new HttpError(503,'ai_access_required','Google не разрешил доступ к Gemini. Владелец должен проверить ключ и доступ к Gemini API в Google AI Studio.');
+      if(response.status===402) throw new HttpError(503,'ai_insufficient_funds','Для Gemini требуется пополнить баланс API. Владелец должен проверить оплату в Google AI Studio.');
+      if(response.status===429) throw new HttpError(429,'ai_quota_required','Достигнут лимит Gemini API. Попробуй позже; если ошибка повторяется, владельцу нужно проверить квоты в Google AI Studio.');
+      if(response.status===404) throw new HttpError(503,'ai_model_unavailable','Модель Gemini недоступна для этого проекта. Владелец должен проверить доступ к модели.');
+      if(response.status===400) throw new HttpError(502,'ai_request_rejected','Gemini отклонил запрос. Владелец должен проверить настройки подключения.');
+      throw new HttpError(502,'ai_unavailable','Gemini сейчас недоступен. Повтори вопрос чуть позже.');
     }
     const answer=data?.choices?.[0]?.message;
     if (!record(answer)) throw new HttpError(502,'ai_invalid_response','ИИ вернул неполный ответ. Повтори вопрос.');
@@ -134,7 +144,10 @@ export async function askAssistant(input, options = {}) {
       return {text:reply,proposals,sources:[...sources],model};
     }
     if(!Array.isArray(calls)||calls.length>6||step===3) throw new HttpError(502,'ai_tool_limit','Запрос получился слишком большим. Раздели его на два вопроса.');
-    messages.push({role:'assistant',content:typeof answer.content==='string'?answer.content:null,tool_calls:calls});
+    // Preserve Google's extra_content (thought signatures) across tool rounds.
+    // These opaque fields stay server-side and are never included in UI history.
+    messages.push({role:'assistant',content:typeof answer.content==='string'?answer.content:null,tool_calls:calls,
+      ...(record(answer.extra_content)?{extra_content:answer.extra_content}:{})});
     for(const call of calls) {
       if(!record(call)||typeof call.id!=='string'||!record(call.function))throw invalid();
       let args; try { args=JSON.parse(call.function.arguments); } catch {args=null;}

@@ -55,7 +55,7 @@ export function AssistantPage() {
     <PageHeader title="ИИ-помощник" subtitle="Разбирается в твоём бизнесе. Помогает действовать."/>
     <Card className="p-5 bg-gradient-to-br from-violet-500/15 via-accent-500/10 to-transparent">
       <Sparkles className="text-accent-300 mb-3" size={26}/><p className="text-sm text-white/75 leading-relaxed">Могу объяснить прибыль, найти основные расходы, расставить приоритеты и подготовить задачу или финансовую запись. Новые записи добавляются только после твоего подтверждения.</p>
-      <p className="text-xs text-white/45 mt-3">При отправке вопроса ИИ получает показатели, категории операций, названия и сроки задач, имена клиентов и суммы сделок через Vercel / Anthropic. Телефоны, email и чеки не передаются. История хранится в этой вкладке.</p>
+      <p className="text-xs text-white/45 mt-3">При отправке вопроса OpenAI получает показатели, категории операций, названия и сроки задач, имена клиентов и суммы сделок. Телефоны, email и чеки не передаются. История хранится в этой вкладке.</p>
     </Card>
     {auth.mode==='demo'&&<p className="text-sm text-amber-300">Для настоящего ИИ войди через Telegram. В демо ответы не подменяются заготовками.</p>}
     {messages.length===0&&<div className="grid gap-2">{suggestions.map(s=><button key={s} disabled={auth.mode!=='telegram'} onClick={()=>void send(s)} className="liquid-control rounded-2xl text-left p-4 text-sm text-white/80 hover:text-white disabled:opacity-40">{s}</button>)}</div>}

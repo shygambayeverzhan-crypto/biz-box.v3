@@ -26,8 +26,11 @@ test('AI boundary strips contact data, arbitrary instructions and credentials',(
 });
 test('tool loop uses actual results, returns confirmation proposals and never writes records',async()=>{
   const original=JSON.stringify(context);let calls=0;
-  const result=await askAssistant({context,message:'Прибыль? И добавь задачу проверить аренду завтра.',history:[]},{token:'test-token',fetcher:async(_url,options)=>{
+  const result=await askAssistant({context,message:'Прибыль? И добавь задачу проверить аренду завтра.',history:[]},{token:'test-token',fetcher:async(url,options)=>{
     const body=JSON.parse(options.body);calls++;
+    assert.equal(url,'https://api.openai.com/v1/chat/completions');
+    assert.equal(options.headers.Authorization,'Bearer test-token');
+    assert.equal(body.store,false);assert.equal(body.max_completion_tokens,2000);assert.equal(body.reasoning_effort,'none');
     if(calls===1)return Response.json({choices:[{message:{role:'assistant',content:null,tool_calls:[
       {id:'c1',type:'function',function:{name:'financial_summary',arguments:'{}'}},
       {id:'c2',type:'function',function:{name:'propose_task',arguments:JSON.stringify({title:'Проверить аренду',dueDate:'2026-10-27',priority:'medium'})}},
@@ -47,6 +50,7 @@ test('unknown tools and malformed proposals are not executed',()=>{
 });
 test('AI provider access errors are honest and do not expose secrets or pretend success',async()=>{
   await assert.rejects(askAssistant({context,message:'Привет',history:[]},{token:'SECRET',fetcher:async()=>Response.json({error:{message:'SECRET'}},{status:402})}),e=>e.code==='ai_access_required'&&!e.message.includes('SECRET'));
+  await assert.rejects(askAssistant({context,message:'Привет',history:[]},{token:'SECRET',fetcher:async()=>Response.json({error:{code:'insufficient_quota',message:'SECRET'}},{status:429})}),e=>e.code==='ai_insufficient_funds'&&!e.message.includes('SECRET'));
 });
 test('confirmed AI proposals are applied once, including retry after failed sync',()=>{
   const p={id:'11111111-1111-4111-8111-111111111111',action:{kind:'task',title:'Позвонить',description:'',dueDate:'2026-10-27',priority:'medium'}};

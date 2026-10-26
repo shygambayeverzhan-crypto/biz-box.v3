@@ -169,7 +169,7 @@ async function setup(body, request) {
   const bearer = request.headers.get('authorization')?.replace(/^Bearer /, '');
   if (!verifyWebhookSecret(bearer, process.env.BIZBOX_SETUP_SECRET)) throw new HttpError(403, 'forbidden', 'Доступ запрещён.');
   if (body.operation === 'test_ai') {
-    return askAssistant({message:'Какая прибыль за октябрь 2026? Ответь одной фразой.',history:[],context:{today:'2026-10-26',transactions:[{type:'income',amount:50000,date:'2026-10-26',status:'completed',category:'Тест'},{type:'expense',amount:33500,date:'2026-10-26',status:'completed',category:'Тест'}],tasks:[],clients:[]}}, {token:process.env.AI_GATEWAY_API_KEY || (process.env.VERCEL ? request.headers.get('x-vercel-oidc-token') : undefined)});
+    return askAssistant({message:'Какая прибыль за октябрь 2026? Также подготовь задачу Проверить рекламу на 27 октября 2026, средний приоритет. Ответь кратко.',history:[],context:{today:'2026-10-26',transactions:[{type:'income',amount:50000,date:'2026-10-26',status:'completed',category:'Тест'},{type:'expense',amount:33500,date:'2026-10-26',status:'completed',category:'Тест'}],tasks:[],clients:[]}});
   }
   const bot = await api('getMe', {});
   if (bot.username?.toLowerCase() !== 'biznowbox_bot') throw new HttpError(409, 'wrong_bot', 'Токен принадлежит другому боту. Нужен @Biznowbox_bot.');
@@ -233,9 +233,7 @@ export default {
         sanitizeContext(body.context);
         if (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 4000 || !Array.isArray(body.history) || body.history.length > 12) throw new HttpError(400,'assistant_input','Проверь текст вопроса.');
         const quota = await billingStore('assistant_reserve', { user_id:user.id });
-        // Vercel injects a rotating token into the request header at runtime.
-        // VERCEL_OIDC_TOKEN is primarily available during builds/local development.
-        return reply({...await askAssistant(body,{token:process.env.AI_GATEWAY_API_KEY || (process.env.VERCEL ? request.headers.get('x-vercel-oidc-token') : undefined)}),remaining:quota.remaining});
+        return reply({...await askAssistant(body),remaining:quota.remaining});
       }
       if (['state','request','referral_state','wallet_redeem'].includes(body.action)) {
         const code = /^ref_[a-f0-9]{32}$/.test(user.startParam) ? user.startParam.slice(4) : '';

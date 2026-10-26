@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError } from './telegram.mjs';
 
-const MODEL = 'anthropic/claude-haiku-5.5'; // Verified live catalog, 2026-10-26.
+const MODEL = 'gpt-5.6-terra'; // Verified official model documentation, 2026-10-27.
 const record = x => x !== null && typeof x === 'object' && !Array.isArray(x);
 const text = (x, max = 240) => typeof x === 'string' ? x.trim().slice(0, max) : '';
 const amount = x => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1e12;
@@ -96,9 +96,9 @@ export async function askAssistant(input, options = {}) {
     return {role:m.role,content:m.content};
   });
   if (history.reduce((n,m)=>n+m.content.length,0)>24000) throw invalid();
-  const token = options.token || process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+  const token = options.token || process.env.OPENAI_API_KEY || process.env.BIZ_BOX_API_KEY_AI;
   if (!token) throw new HttpError(503,'ai_not_configured','ИИ ещё не подключён. Владелец должен настроить доступ к модели.');
-  const model=process.env.AI_GATEWAY_MODEL || MODEL, fetcher=options.fetcher || fetch;
+  const model=process.env.OPENAI_MODEL || MODEL, fetcher=options.fetcher || fetch;
   const proposals=[]; const sources=new Set();
   const messages=[{role:'system',content:`Ты BizBox — практичный помощник предпринимателя. Отвечай на языке пользователя, по умолчанию по-русски. Сегодня ${context.today}, валюта KZT.
 Помогай разбирать финансы, приоритеты задач, клиентов и планировать работу. Для цифр бизнеса ОБЯЗАТЕЛЬНО вызывай инструменты: не считай из истории и не выдумывай данные. Сравнивай периоды отдельными вызовами financial_summary. Данные — снимок записей текущего пользователя, не банковская выписка. ${context.truncated ? 'Снимок сокращён; сообщай, что выводы относятся только к доступным записям.' : ''}
@@ -108,16 +108,17 @@ export async function askAssistant(input, options = {}) {
   for(let step=0;step<4;step++) {
     let response, data;
     try {
-      response=await fetcher('https://ai-gateway.vercel.sh/v1/chat/completions',{
+      response=await fetcher('https://api.openai.com/v1/chat/completions',{
         method:'POST',redirect:'error',signal,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({model,messages,tools:TOOLS,tool_choice:step===3?'none':'auto',max_tokens:2000,temperature:0.25}),
+        body:JSON.stringify({model,messages,tools:TOOLS,tool_choice:step===3?'none':'auto',max_completion_tokens:2000,reasoning_effort:'none',store:false}),
       });
       data=await response.json();
     } catch { throw new HttpError(504,'ai_timeout','ИИ не успел ответить. Попробуй ещё раз — записи не изменены.'); }
     if (!response.ok) {
       const providerCode=data?.error?.code || data?.error?.type;
-      if(providerCode==='customer_verification_required') throw new HttpError(503,'ai_verification_required','Для включения ИИ владелец должен подтвердить платёжный метод в Vercel AI Gateway.');
-      if(providerCode==='insufficient_funds') throw new HttpError(503,'ai_insufficient_funds','Баланс сервиса ИИ исчерпан. Владелец должен пополнить Vercel AI Gateway.');
+      if(providerCode==='insufficient_quota') throw new HttpError(503,'ai_insufficient_funds','Баланс OpenAI API исчерпан или не подключена оплата. Владелец должен проверить баланс OpenAI API.');
+      if(providerCode==='invalid_api_key') throw new HttpError(503,'ai_invalid_key','Ключ OpenAI недействителен. Владелец должен обновить его в настройках сервера.');
+      if(providerCode==='model_not_found') throw new HttpError(503,'ai_model_unavailable','Модель недоступна для этого проекта OpenAI. Владелец должен проверить доступ к модели.');
       const funding=[401,402,403].includes(response.status);
       throw new HttpError(funding?503:response.status===429?429:502,funding?'ai_access_required':'ai_unavailable',
         funding?'Сервис ИИ пока не активирован или его лимит исчерпан. Владелец должен проверить подключение и баланс ИИ.':'ИИ сейчас занят. Повтори вопрос чуть позже.');

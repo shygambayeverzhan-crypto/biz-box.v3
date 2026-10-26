@@ -166,6 +166,7 @@ export interface CalendarEvent {
 
 export interface AppState {
   user: UserProfile | null;
+  accessCode?: string;
   business: BusinessProfile | null;
   onboardingComplete: boolean;
   onboardingStep?: number;

@@ -44,6 +44,7 @@ const rows = (value: unknown, check: (row: Record<string, unknown>) => boolean) 
 /** Validate before saving and after loading so bad storage never becomes a new account. */
 export function isWorkspaceState(value: unknown): value is AppState {
   if (!record(value) || typeof value.onboardingComplete !== 'boolean') return false;
+  if (value.accessCode !== undefined && (typeof value.accessCode !== 'string' || value.accessCode.length > 4096)) return false;
   if (value.onboardingStep !== undefined && (!Number.isInteger(value.onboardingStep) || Number(value.onboardingStep) < 0 || Number(value.onboardingStep) > 2)) return false;
   const user = value.user;
   if (user !== null && !(record(user) && fields(user, ['name', 'email']) && oneOf(user.plan, ['free', 'business', 'pro']))) return false;

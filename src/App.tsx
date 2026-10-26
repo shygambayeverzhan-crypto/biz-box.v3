@@ -19,22 +19,23 @@ import { Lock } from 'lucide-react';
 import type { Page } from '@/types';
 import { WorkspaceLoading, SyncBanner, LegacyImport } from '@/components/WorkspaceStatus';
 
-function Guard({ children, onNavigate }: { children: ReactNode; onNavigate: (p: Page) => void }) {
+function Guard({ children, onNavigate, minimumPlan = 'pro' }: { children: ReactNode; onNavigate: (p: Page) => void; minimumPlan?: 'business' | 'pro' }) {
   const { state } = useApp();
-  const userPlan = (state.user?.plan || 'free').toLowerCase();
+  const userPlan = state.user?.plan || 'free';
+  const hasAccess = userPlan === 'pro' || (minimumPlan === 'business' && userPlan === 'business');
 
-  if (userPlan !== 'pro' && userPlan !== 'enterprise') {
+  if (!hasAccess) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-        <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mb-4 shadow-sm">
-          <Lock className="w-8 h-8" />
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center bg-bg-card rounded-2xl border border-border">
+        <div className="w-16 h-16 bg-accent-500/10 text-accent-400 rounded-full flex items-center justify-center mb-4">
+          <Lock className="w-8 h-8" aria-hidden="true" />
         </div>
-        <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">Доступ ограничен</h2>
-        <p className="text-gray-500 max-w-md mb-6">
-          Этот раздел доступен только на тарифе <strong>PRO</strong>. Оформите подписку или примените промокод, чтобы разблокировать доступ.
+        <h2 className="text-2xl font-bold mb-2 text-white">Больше возможностей для бизнеса</h2>
+        <p className="text-white/60 max-w-md mb-6">
+          Этот раздел доступен на тарифе <strong>{minimumPlan === 'business' ? 'BUSINESS или PRO' : 'PRO'}</strong>. Выбери подходящий тариф, чтобы подключить его.
         </p>
-        <button onClick={() => onNavigate('subscription')} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition shadow-md">
-          Улучшить тариф
+        <button type="button" onClick={() => onNavigate('subscription')} className="px-6 py-3 bg-accent-500 text-white rounded-xl font-semibold hover:bg-accent-600 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400">
+          Посмотреть тарифы
         </button>
       </div>
     );
@@ -62,7 +63,7 @@ function AppContent() {
     <><SyncBanner /><AppLayout current={page} onNavigate={handleNavigate}>
       {page === 'dashboard' && <DashboardPage onNavigate={handleNavigate} />}
       {page === 'finance' && <FinancePage />}
-      {page === 'documents' && <Guard onNavigate={handleNavigate}><DocumentsPage /></Guard>}
+      {page === 'documents' && <Guard onNavigate={handleNavigate} minimumPlan="business"><DocumentsPage /></Guard>}
       {page === 'specialists' && <Guard onNavigate={handleNavigate}><SpecialistsPage /></Guard>}
       {page === 'employees' && <Guard onNavigate={handleNavigate}><EmployeesPage /></Guard>}
       {page === 'clients' && <ClientsPage />}

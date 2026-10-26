@@ -1,10 +1,10 @@
 # BizBox — Telegram Mini App
 
-BizBox is a React/Vite personal business workspace. Version **2.0-cloud** stores a user's profile, onboarding progress and workspace in **Telegram CloudStorage**, scoped by Telegram to the current bot and user. No new hosted database, bot token or paid backend is needed for this version.
+BizBox is a React/Vite personal business workspace. Version **2.1-plans** stores a user's profile, onboarding progress and workspace in **Telegram CloudStorage**, scoped by Telegram to the current bot and user. It includes FREE/BUSINESS/PRO pricing, the owner's Kaspi payment link and manually issued access codes. No new hosted database, bot token or paid backend is needed for this version.
 
 ## Open
 
-Production: https://biz-boxv3.vercel.app
+Production: https://biz-box-v3.vercel.app (also https://biz-boxv3.vercel.app)
 Telegram: https://t.me/Biznowbox_bot?startapp
 
 Outside Telegram the landing page offers an explicit, temporary demo with sample data. Email/password registration and fake password reset have been removed. A direct browser visit does not authenticate a Telegram user.
@@ -30,7 +30,7 @@ npm run check
 5. Existing browser data are offered for explicit import when there is no cloud profile. This is never automatic because the previous email login did not verify ownership.
 6. UI shows saving/saved/error. On error the user can retry, export a JSON copy, or explicitly replace local edits with the cloud version. Close confirmation is enabled while data are pending.
 
-The SDK's `initDataUnsafe` is used for a display name and a local cache key only. There is no application server trusting it as authentication. CloudStorage requests use Telegram's own bridge and per-user storage. Future server APIs must validate `initData` server-side (HMAC with the bot token or Telegram's documented Ed25519 signature), and enforce ownership.
+The SDK's `initDataUnsafe` is used for display, a local cache key and matching a signed access code to the client account ID. This is a client UI check, not server authentication. CloudStorage requests use Telegram's own bridge and per-user storage. Future server APIs must validate `initData` server-side (HMAC with the bot token or Telegram's documented Ed25519 signature), and enforce ownership.
 
 ## Storage format and limits
 
@@ -41,7 +41,11 @@ The SDK's `initDataUnsafe` is used for a display name and a local cache key only
 - All chunks must be acknowledged before publishing a new manifest. The previous generation is retained; older committed generations are cleaned up best effort.
 - A failure or timeout does not report successful save. A manifest timeout can be ambiguous: reload the cloud version to reconcile before trying to overwrite it.
 - Known revision conflicts are rejected. Telegram CloudStorage has no compare-and-swap/transactions, so simultaneous writes from two devices can still race; use one active editing window.
-- This is a personal MVP, not a shared team database. Larger datasets, shared workspaces, authoritative billing/admin access and payment verification need a server-backed database with verified Telegram identity. Existing tariff/payment screens remain prototype features; the admin panel is available only in demo.
+- This is a personal MVP, not a shared team database. Larger datasets, shared workspaces, authoritative billing/admin access and payment verification need a server-backed database with verified Telegram identity. Paid UI access uses signed, expiring owner-issued codes; it is not bank verification or a server authorization boundary. The demo admin panel cannot grant real access.
+
+## Pricing and payments
+
+Read [BILLING.md](BILLING.md) for prices, receipt handling, issuing access codes and private-key backup. Payments use the owner's external Kaspi URL; receipts go to @shygambayevtg. Clicking the payment button never grants access. The private signing key stays outside Git in `.secrets/`; only the public verifier is deployed. No subscription auto-renewal or bank API is connected. See the billing document for Telegram distribution restrictions and the distinction between this Mini App and a separately authenticated website.
 
 Official APIs:
 - https://core.telegram.org/bots/webapps#cloudstorage
@@ -49,7 +53,7 @@ Official APIs:
 
 ## Release and operational checks
 
-Keep the Mini App/menu URL in BotFather on one stable production alias: `https://biz-boxv3.vercel.app`. Deploy-specific preview URLs should not be used as the permanent bot URL.
+Keep the Mini App/menu URL in BotFather on one stable production alias: `https://biz-box-v3.vercel.app`. Deploy-specific preview URLs should not be used as the permanent bot URL.
 
 Before release:
 - `npm run check` must pass.

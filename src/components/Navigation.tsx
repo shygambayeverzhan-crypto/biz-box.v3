@@ -1,4 +1,4 @@
-import { LayoutDashboard, Wallet, FileText, Users, CheckSquare, UserCog, Calendar, Briefcase, Settings } from 'lucide-react';
+import { LayoutDashboard, Wallet, FileText, Users, CheckSquare, UserCog, Calendar, Briefcase, Settings, CreditCard } from 'lucide-react';
 import type { Page } from '@/types';
 import { Logo } from '@/components/Logo';
 import { cn } from '@/lib/cn';
@@ -18,6 +18,7 @@ const navItems: { page: Page; label: string; icon: typeof LayoutDashboard }[] = 
   { page: 'employees', label: 'Сотрудники', icon: UserCog },
   { page: 'calendar', label: 'Календарь', icon: Calendar },
   { page: 'specialists', label: 'Специалисты', icon: Briefcase },
+  { page: 'subscription', label: 'Тарифы', icon: CreditCard },
 ];
 
 export function Sidebar({ current, onNavigate, businessName }: SidebarProps) {
@@ -33,6 +34,8 @@ export function Sidebar({ current, onNavigate, businessName }: SidebarProps) {
           return (
             <button
               key={item.page}
+              type="button"
+              aria-current={active ? 'page' : undefined}
               onClick={() => onNavigate(item.page)}
               className={cn(
                 'w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative group',

@@ -1,7 +1,7 @@
 import type { CloudStorage } from './cloudWorkspace';
 
 export const BOT_URL = 'https://t.me/Biznowbox_bot?startapp';
-export const APP_VERSION = '2.0-cloud';
+export const APP_VERSION = '2.1-plans';
 
 export interface TelegramWebApp {
   initData: string;
@@ -11,6 +11,8 @@ export interface TelegramWebApp {
   ready: () => void;
   expand: () => void;
   close: () => void;
+  openLink?: (url: string) => void;
+  openTelegramLink?: (url: string) => void;
   isVersionAtLeast: (version: string) => boolean;
   enableClosingConfirmation?: () => void;
   disableClosingConfirmation?: () => void;

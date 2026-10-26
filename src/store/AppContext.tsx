@@ -7,6 +7,7 @@ import { createSeedState, createNewUserState } from '@/lib/seed';
 import { uid } from '@/lib/format';
 import { loadWorkspace, saveWorkspace, isWorkspaceState, type CloudStorage } from '@/lib/cloudWorkspace';
 import { getTelegram, isTelegramLaunch, telegramDisplayName } from '@/lib/telegram';
+import { verifyAccessCode, type SubscriptionAccess } from '@/lib/subscriptionAccess';
 
 interface AuthState { mode: 'telegram' | 'demo' | null }
 interface ReferralStats { code: string; invitedCount: number; bonusEarned: number }
@@ -15,6 +16,8 @@ interface AppContextValue {
   state: AppState;
   auth: AuthState;
   referral: ReferralStats;
+  subscriptionAccess: SubscriptionAccess | null;
+  activateAccessCode: (code: string) => Promise<void>;
   bootStatus: 'loading' | 'ready' | 'error';
   bootError: string;
   syncStatus: SyncStatus;
@@ -63,6 +66,15 @@ const AppContext = createContext<AppContextValue | null>(null);
 const emptyState = () => ({ ...createNewUserState('', ''), user: null });
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Не удалось связаться с Telegram. Попробуйте ещё раз.';
 
+function currentTelegramUserId(): string | null {
+  const id = getTelegram()?.initDataUnsafe?.user?.id;
+  return typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? String(id) : null;
+}
+
+function withPlan(value: AppState, plan: UserProfile['plan']): AppState {
+  return value.user && value.user.plan !== plan ? { ...value, user: { ...value.user, plan } } : value;
+}
+
 function readLegacy(): AppState | null {
   try {
     const value = JSON.parse(localStorage.getItem('bizbox_state_v1') || 'null');
@@ -81,6 +93,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncError, setSyncError] = useState('');
   const [legacyState, setLegacyState] = useState<AppState | null>(null);
+  const [subscriptionAccess, setSubscriptionAccess] = useState<SubscriptionAccess | null>(null);
+  const accessRef = useRef<SubscriptionAccess | null>(null);
+  const accessEpoch = useRef(0);
+  const activatingAccess = useRef(false);
+  const accessSuspended = useRef(true);
+  const telegramUserIdRef = useRef<string | null>(null);
   const stateRef = useRef(state);
   const modeRef = useRef<AuthState['mode']>(null);
   const storageRef = useRef<CloudStorage | null>(null);
@@ -90,6 +108,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const completingRef = useRef(false);
   const bootRun = useRef(0);
   const cacheKey = useRef<string | null>(null);
+
+  const rememberAccess = useCallback((access: SubscriptionAccess | null) => {
+    accessRef.current = access;
+    setSubscriptionAccess(access);
+  }, []);
+
+  const clearAccess = useCallback(() => {
+    accessEpoch.current += 1;
+    rememberAccess(null);
+  }, [rememberAccess]);
 
   const replaceState = useCallback((next: AppState) => {
     stateRef.current = next;
@@ -152,6 +180,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Wait for any in-flight write before a user-requested reload.
     if (savingRef.current) await savingRef.current.catch(() => {});
     const run = ++bootRun.current;
+    accessSuspended.current = true;
+    clearAccess();
+    telegramUserIdRef.current = null;
     setBootStatus('loading');
     setBootError('');
     try {
@@ -171,12 +202,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       storageRef.current = app.CloudStorage;
       const loaded = await loadWorkspace(app.CloudStorage);
       if (run !== bootRun.current) return;
+      const userId = currentTelegramUserId();
+      const storedState = loaded.state || createNewUserState('', telegramDisplayName(app));
+      let access: SubscriptionAccess | null = null;
+      if (storedState.accessCode && userId) {
+        try { access = await verifyAccessCode(storedState.accessCode, userId); } catch { /* Invalid/expired codes never grant access. */ }
+      }
+      if (run !== bootRun.current) return;
+      if (userId !== currentTelegramUserId()) throw new Error('Telegram-аккаунт изменился. Откройте приложение снова.');
       revisionRef.current = loaded.revision;
       pendingRef.current = null;
       modeRef.current = 'telegram';
-      const id = app.initDataUnsafe?.user?.id;
-      cacheKey.current = Number.isSafeInteger(id) ? 'bizbox_cache_v2_' + id : null;
-      const next = loaded.state || createNewUserState('', telegramDisplayName(app));
+      telegramUserIdRef.current = userId;
+      cacheKey.current = userId ? 'bizbox_cache_v2_' + userId : null;
+      const next = withPlan(storedState, access?.plan || 'free');
+      accessSuspended.current = false;
+      rememberAccess(access);
       replaceState(next);
       setAuth({ mode: 'telegram' });
       setLegacyState(loaded.state ? null : readLegacy());
@@ -189,9 +230,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBootError(errorMessage(error));
       setBootStatus('error');
     }
-  }, [replaceState]);
+  }, [replaceState, clearAccess, rememberAccess]);
 
   useEffect(() => { void reloadWorkspace(); }, [reloadWorkspace]);
+  // A retried save may commit an earlier activation after its original promise
+  // rejected. Verify again only after CloudStorage acknowledges the saved code.
+  useEffect(() => {
+    if (auth.mode !== 'telegram' || bootStatus !== 'ready' || syncStatus !== 'saved' || accessSuspended.current) return;
+    const epoch = accessEpoch.current;
+    const code = state.accessCode;
+    const userId = currentTelegramUserId();
+    let cancelled = false;
+    const refresh = async () => {
+      let access: SubscriptionAccess | null = null;
+      if (code && userId && userId === telegramUserIdRef.current) {
+        try { access = await verifyAccessCode(code, userId); } catch { /* Keep workspace data and fall back to FREE. */ }
+      }
+      if (cancelled || epoch !== accessEpoch.current || modeRef.current !== 'telegram' || accessSuspended.current
+        || code !== stateRef.current.accessCode || userId !== currentTelegramUserId()
+        || pendingRef.current || savingRef.current) return;
+      rememberAccess(access);
+      replaceState(withPlan(stateRef.current, access?.plan || 'free'));
+    };
+    void refresh();
+    return () => { cancelled = true; };
+  }, [auth.mode, bootStatus, syncStatus, state.accessCode, rememberAccess, replaceState]);
+
+  useEffect(() => {
+    if (auth.mode !== 'telegram') return;
+    const expire = () => {
+      const access = accessRef.current;
+      if (!access || (access.expiresAt > Date.now() && currentTelegramUserId() === telegramUserIdRef.current)) return;
+      if (currentTelegramUserId() !== telegramUserIdRef.current) {
+        accessSuspended.current = true;
+        clearAccess();
+        setBootError('Telegram-аккаунт изменился. Откройте приложение снова.');
+        setBootStatus('error');
+        return;
+      }
+      rememberAccess(null);
+      setState(s => withPlan(s, 'free'));
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') expire(); };
+    const timer = window.setInterval(expire, 15_000);
+    window.addEventListener('focus', expire);
+    document.addEventListener('visibilitychange', onVisible);
+    expire();
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', expire);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [auth.mode, clearAccess, rememberAccess, setState]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (pendingRef.current || savingRef.current) { event.preventDefault(); event.returnValue = ''; }
@@ -202,13 +292,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const startDemo = useCallback(() => {
     if (getTelegram()) return; // Real Telegram sessions always use their cloud workspace.
+    accessSuspended.current = true;
+    clearAccess();
+    telegramUserIdRef.current = null;
     modeRef.current = 'demo';
     replaceState(createSeedState());
     setAuth({ mode: 'demo' });
     setSyncStatus('idle');
-  }, [replaceState]);
+  }, [replaceState, clearAccess]);
 
   const logout = useCallback(() => {
+    accessSuspended.current = true;
+    clearAccess();
     if (modeRef.current === 'telegram') {
       void flush().then(() => getTelegram()?.close()).catch(() => {});
       return;
@@ -216,7 +311,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     modeRef.current = null;
     replaceState(emptyState());
     setAuth({ mode: null });
-  }, [flush, replaceState]);
+  }, [flush, replaceState, clearAccess]);
+
+  const activateAccessCode = useCallback(async (code: string) => {
+    const userId = currentTelegramUserId();
+    if (modeRef.current !== 'telegram' || accessSuspended.current || !storageRef.current || !userId || userId !== telegramUserIdRef.current) {
+      throw new Error('Откройте BizBox через меню бота в Telegram, чтобы активировать код для своего аккаунта.');
+    }
+    if (activatingAccess.current) throw new Error('Предыдущий код ещё сохраняется. Дождитесь завершения.');
+    if (!stateRef.current.user) throw new Error('Профиль ещё не загружен. Откройте приложение снова.');
+    activatingAccess.current = true;
+    const run = bootRun.current;
+    const epoch = accessEpoch.current;
+    try {
+      const access = await verifyAccessCode(code, userId);
+      if (run !== bootRun.current || epoch !== accessEpoch.current || modeRef.current !== 'telegram' || userId !== currentTelegramUserId()) {
+        throw new Error('Аккаунт изменился. Откройте приложение снова и повторите активацию.');
+      }
+      const normalized = code.trim();
+      // Raw state can be optimistic; the public user.plan below remains based on
+      // confirmed subscriptionAccess until the save promise succeeds.
+      setState(s => withPlan({ ...s, accessCode: normalized }, access.plan));
+      await flush();
+      if (run !== bootRun.current || epoch !== accessEpoch.current || modeRef.current !== 'telegram'
+        || normalized !== stateRef.current.accessCode || userId !== currentTelegramUserId()) {
+        throw new Error('Сеанс изменился во время сохранения. Откройте приложение снова.');
+      }
+      const committedAccess = await verifyAccessCode(normalized, userId);
+      if (run !== bootRun.current || epoch !== accessEpoch.current || accessSuspended.current
+        || modeRef.current !== 'telegram' || normalized !== stateRef.current.accessCode || userId !== currentTelegramUserId()) {
+        throw new Error('Сеанс изменился во время проверки. Откройте приложение снова.');
+      }
+      rememberAccess(committedAccess);
+    } finally {
+      activatingAccess.current = false;
+    }
+  }, [setState, flush, rememberAccess]);
 
   const completeOnboarding = useCallback(async (business: BusinessProfile) => {
     const next = { ...stateRef.current, business, onboardingComplete: true, onboardingStep: 2 };
@@ -245,12 +375,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const dismissLegacy = useCallback(() => setLegacyState(null), []);
   const importLegacy = useCallback(async () => {
     if (!legacyState || modeRef.current !== 'telegram') return;
-    const next = { ...legacyState, user: { ...legacyState.user!, plan: 'free' as const } };
+    const { accessCode: _untrustedCode, ...legacyData } = legacyState;
+    const next = { ...legacyData, user: { ...legacyData.user!, plan: 'free' as const } };
+    clearAccess();
     pendingRef.current = next;
     await flush();
     replaceState(next);
     setLegacyState(null);
-  }, [legacyState, flush, replaceState]);
+  }, [legacyState, flush, replaceState, clearAccess]);
 
   const exportWorkspace = useCallback(() => {
     const blob = new Blob([JSON.stringify(pendingRef.current || stateRef.current, null, 2)], { type: 'application/json' });
@@ -263,7 +395,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateUser = useCallback((patch: Partial<UserProfile>) => {
-    setState(s => s.user ? { ...s, user: { ...s.user, ...patch } } : s);
+    const { plan: _untrustedPlan, ...profilePatch } = patch;
+    const allowedPatch = modeRef.current === 'demo' ? patch : profilePatch;
+    setState(s => s.user ? { ...s, user: { ...s.user, ...allowedPatch } } : s);
   }, [setState]);
 
   const updateBusiness = useCallback((patch: Partial<BusinessProfile>) => {
@@ -347,6 +481,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [setState]);
 
   const setPlan = useCallback((plan: UserProfile['plan']) => {
+    if (modeRef.current !== 'demo') return;
     setState(s => s.user ? { ...s, user: { ...s.user, plan } } : s);
   }, [setState]);
 
@@ -354,19 +489,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const id = uid('pay');
     setState(s => ({
       ...s,
-      payments: [{ ...p, id, createdAt: new Date().toISOString(), status: 'awaiting_confirmation' }, ...s.payments],
+      payments: [{ ...p, id, createdAt: new Date().toISOString(), status: 'awaiting_payment' as const }, ...s.payments].slice(0, 50),
     }));
     return id;
   }, [setState]);
 
   const updatePaymentStatus = useCallback((id: string, status: PaymentStatus) => {
-    setState(s => ({ ...s, payments: s.payments.map(p => p.id === id ? { ...p, status } : p) }));
+    if (modeRef.current !== 'demo' && status !== 'navigated_to_kaspi' && status !== 'awaiting_confirmation') return;
+    setState(s => ({ ...s, payments: s.payments.map(p => {
+      if (p.id !== id || p.status === 'confirmed' || p.status === 'rejected') return p;
+      if (status === 'navigated_to_kaspi' && p.status !== 'awaiting_payment') return p;
+      return { ...p, status };
+    }) }));
   }, [setState]);
 
   const confirmPayment = useCallback((id: string) => {
+    if (modeRef.current !== 'demo') return;
     setState(s => {
       const payment = s.payments.find(p => p.id === id);
-      if (!payment) return s;
+      if (!payment || payment.status === 'confirmed' || payment.status === 'rejected') return s;
       return {
         ...s,
         payments: s.payments.map(p => p.id === id ? { ...p, status: 'confirmed' } : p),
@@ -376,10 +517,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [setState]);
 
   const rejectPayment = useCallback((id: string) => {
-    setState(s => ({ ...s, payments: s.payments.map(p => p.id === id ? { ...p, status: 'rejected' } : p) }));
+    if (modeRef.current !== 'demo') return;
+    setState(s => ({ ...s, payments: s.payments.map(p => p.id === id && p.status !== 'confirmed' && p.status !== 'rejected' ? { ...p, status: 'rejected' } : p) }));
   }, [setState]);
 
   const applyReferralCode = useCallback((code: string) => {
+    if (modeRef.current !== 'demo') return { ok: false, message: 'Используйте персональный код доступа, выданный владельцем BizBox после проверки оплаты.' };
     if (!code || code.trim().length === 0) {
       return { ok: false, message: 'Введите промокод' };
     }
@@ -394,8 +537,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 
 
+  const effectiveAccess = auth.mode === 'telegram' && !accessSuspended.current && subscriptionAccess
+    && subscriptionAccess.expiresAt > Date.now() && currentTelegramUserId() === telegramUserIdRef.current
+    ? subscriptionAccess : null;
   const value: AppContextValue = {
-    state, auth, referral, bootStatus, bootError, syncStatus, syncError, legacyState,
+    state: auth.mode === 'telegram' ? withPlan(state, effectiveAccess?.plan || 'free') : state,
+    auth, referral, subscriptionAccess: effectiveAccess, activateAccessCode, bootStatus, bootError, syncStatus, syncError, legacyState,
     startDemo, logout, reloadWorkspace, retrySave, importLegacy, dismissLegacy, exportWorkspace,
     saveOnboardingDraft, completeOnboarding, updateUser, updateBusiness,
     addTransaction, updateTransaction, deleteTransaction,

@@ -12,6 +12,7 @@ import { Input, Field, Select } from '@/components/ui/Input';
 import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/format';
 import { APP_VERSION } from '@/lib/telegram';
+import { PLANS, PAYMENT_CONTACT } from '@/lib/billing';
 
 const planNames: Record<string, string> = { free: 'FREE', business: 'BUSINESS', pro: 'PRO' };
 
@@ -189,46 +190,6 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
     );
   }
 
-  function SubscriptionSection({ onNavigate }: { onNavigate: (p: Page) => void }) {
-    const plan = state.user?.plan || 'free';
-    const planInfo = { free: { name: 'FREE', price: '0 ₸' }, business: { name: 'BUSINESS', price: '4 990 ₸' }, pro: { name: 'PRO', price: '14 990 ₸' } };
-    const pendingPayment = state.payments.find(p => p.status === 'awaiting_confirmation' || p.status === 'under_review');
-
-    return (
-      <div className="space-y-6">
-        <Card className="p-5 sm:p-6">
-          <h3 className="text-base font-semibold text-white mb-5">Текущая подписка</h3>
-          <div className="flex items-center justify-between p-4 rounded-xl bg-bg-base border border-border mb-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-lg font-bold text-white">{planInfo[plan].name}</p>
-                <Badge tone="accent">Активен</Badge>
-              </div>
-              <p className="text-sm text-white/40 mt-1">{planInfo[plan].price} / месяц</p>
-            </div>
-          </div>
-          <Button onClick={() => onNavigate('subscription')}>Управление подпиской</Button>
-        </Card>
-
-        {pendingPayment && (
-          <Card className="p-5 border-warning-500/30">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-warning-500/10 text-warning-400 flex items-center justify-center shrink-0">
-                <Clock className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white">Оплата на проверке</p>
-                <p className="text-xs text-white/50 mt-0.5">
-                  Тариф {planInfo[pendingPayment.plan].name} — {planInfo[pendingPayment.plan].price}. Статус: ожидает подтверждения.
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
-      </div>
-    );
-  }
-
   function AdminSection() {
     const payments = state.payments;
     const pending = payments.filter(p => p.status === 'awaiting_confirmation' || p.status === 'under_review');
@@ -312,4 +273,52 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
     );
   }
 }
+function SubscriptionSection({ onNavigate }: { onNavigate: (p: Page) => void }) {
+  const { state, auth, subscriptionAccess } = useApp();
+  const plan = state.user?.plan || 'free';
+  const planInfo = PLANS[plan];
+  const pendingPayment = state.payments.find(p => p.status !== 'confirmed' && p.status !== 'rejected' && p.plan !== plan && plan !== 'pro');
+  const expiry = subscriptionAccess && plan !== 'free'
+    ? new Date(subscriptionAccess.expiresAt).toLocaleDateString('ru-RU')
+    : null;
+
+  return (
+    <div className="space-y-6">
+      <Card className="p-5 sm:p-6">
+        <h3 className="text-base font-semibold text-white mb-5">Текущая подписка</h3>
+        <div className="flex items-center justify-between p-4 rounded-xl bg-bg-base border border-border mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-lg font-bold text-white">{planInfo.name}</p>
+              <Badge tone="accent">{auth.mode === 'demo' ? 'Демо' : 'Активен'}</Badge>
+            </div>
+            <p className="text-sm text-white/40 mt-1">{plan === 'free' ? 'Бесплатно, без срока' : `${formatCurrency(planInfo.price)} / 30 дней`}</p>
+            {expiry && <p className="text-sm text-white/60 mt-2">Доступ до {expiry}</p>}
+          </div>
+        </div>
+        <Button onClick={() => onNavigate('subscription')}>Тарифы и оплата</Button>
+      </Card>
+
+      {pendingPayment && (
+        <Card className="p-5 border-warning-500/30">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-warning-500/10 text-warning-400 flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-white">Сохранённая заявка</p>
+              <p className="text-xs text-white/50 mt-0.5">
+                {PLANS[pendingPayment.plan].name} — {formatCurrency(pendingPayment.amount)}. Если уже оплатил, отправь чек @{PAYMENT_CONTACT} и получи код активации.
+              </p>
+              <p className="text-xs text-white/40 mt-2">Эта запись сохранена только в твоём кабинете. Она не подтверждает платёж и не отправляет чек.</p>
+            </div>
+          </div>
+          <Button variant="secondary" size="sm" className="mt-4" onClick={() => onNavigate('subscription')}>Продолжить оформление</Button>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+
 export default SettingsPage;

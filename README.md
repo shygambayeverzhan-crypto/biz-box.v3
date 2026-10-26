@@ -1,6 +1,6 @@
 # BizBox — Telegram Mini App
 
-BizBox is a React/Vite personal business workspace. Version **2.1-plans** stores a user's profile, onboarding progress and workspace in **Telegram CloudStorage**, scoped by Telegram to the current bot and user. It includes FREE/BUSINESS/PRO pricing, the owner's Kaspi payment link and manually issued access codes. No new hosted database, bot token or paid backend is needed for this version.
+BizBox is a React/Vite personal business workspace. Version **2.2-admin** stores a user's profile, onboarding progress and workspace in **Telegram CloudStorage**, scoped by Telegram to the current bot and user. Paid subscription requests are handled by a Vercel API, Supabase storage and the owner's Telegram bot: approve/reject buttons activate access without manually issuing codes. Existing signed codes remain a fallback. Server configuration is documented in [ADMIN.md](ADMIN.md).
 
 ## Open
 
@@ -19,7 +19,7 @@ npm run dev
 npm run check
 ```
 
-`npm run check` runs TypeScript, storage regression tests, then the production build. Vercel uses the same command before publishing. No environment variables are required. The existing unused Supabase starter schema is not applied by this application.
+`npm run check` runs TypeScript, storage regression tests, then the production build. Vercel uses the same command before publishing. The workspace/demo needs no environment variables; the billing server needs the Production secrets listed in `.env.example`. The existing unused Supabase starter schema is not applied; billing uses only `supabase/bizbox-billing.sql`.
 
 ## Persistence and navigation
 
@@ -30,7 +30,7 @@ npm run check
 5. Existing browser data are offered for explicit import when there is no cloud profile. This is never automatic because the previous email login did not verify ownership.
 6. UI shows saving/saved/error. On error the user can retry, export a JSON copy, or explicitly replace local edits with the cloud version. Close confirmation is enabled while data are pending.
 
-The SDK's `initDataUnsafe` is used for display, a local cache key and matching a signed access code to the client account ID. This is a client UI check, not server authentication. CloudStorage requests use Telegram's own bridge and per-user storage. Future server APIs must validate `initData` server-side (HMAC with the bot token or Telegram's documented Ed25519 signature), and enforce ownership.
+The SDK's `initDataUnsafe` is used for display, a local cache key and matching a signed access code to the client account ID. CloudStorage requests use Telegram's own bridge and per-user storage. The billing API separately verifies the signed `initData` with the bot token, checks its age and enforces ownership. It never trusts a user ID or amount supplied by the browser.
 
 ## Storage format and limits
 
@@ -41,11 +41,11 @@ The SDK's `initDataUnsafe` is used for display, a local cache key and matching a
 - All chunks must be acknowledged before publishing a new manifest. The previous generation is retained; older committed generations are cleaned up best effort.
 - A failure or timeout does not report successful save. A manifest timeout can be ambiguous: reload the cloud version to reconcile before trying to overwrite it.
 - Known revision conflicts are rejected. Telegram CloudStorage has no compare-and-swap/transactions, so simultaneous writes from two devices can still race; use one active editing window.
-- This is a personal MVP, not a shared team database. Larger datasets, shared workspaces, authoritative billing/admin access and payment verification need a server-backed database with verified Telegram identity. Paid UI access uses signed, expiring owner-issued codes; it is not bank verification or a server authorization boundary. The demo admin panel cannot grant real access.
+- This is a personal MVP, not a shared team database. Business workspace data remain in CloudStorage; payment requests and subscription decisions are now in a server database. Paid UI access follows the server subscription or an unexpired legacy signed code. This does not verify bank transfers or turn client-side business features into server-protected APIs. The demo admin panel cannot grant real access.
 
 ## Pricing and payments
 
-Read [BILLING.md](BILLING.md) for prices, receipt handling, issuing access codes and private-key backup. Payments use the owner's external Kaspi URL; receipts go to @shygambayevtg. Clicking the payment button never grants access. The private signing key stays outside Git in `.secrets/`; only the public verifier is deployed. No subscription auto-renewal or bank API is connected. See the billing document for Telegram distribution restrictions and the distinction between this Mini App and a separately authenticated website.
+Read [ADMIN.md](ADMIN.md) for the normal payment-request workflow and [BILLING.md](BILLING.md) for fallback codes/private-key backup. Payments use the owner's external Kaspi URL; receipts go to @Biznowbox_bot. The owner receives approve/reject buttons in the same bot. Clicking the payment button or marking a request as paid never grants access by itself. No bank API is connected. See the billing document for Telegram distribution restrictions and the distinction between this Mini App and a separately authenticated website.
 
 Official APIs:
 - https://core.telegram.org/bots/webapps#cloudstorage

@@ -274,10 +274,9 @@ export function SettingsPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
   }
 }
 function SubscriptionSection({ onNavigate }: { onNavigate: (p: Page) => void }) {
-  const { state, auth, subscriptionAccess } = useApp();
+  const { state, auth, subscriptionAccess, paymentRequest, billingStatus, billingError } = useApp();
   const plan = state.user?.plan || 'free';
   const planInfo = PLANS[plan];
-  const pendingPayment = state.payments.find(p => p.status !== 'confirmed' && p.status !== 'rejected' && p.plan !== plan && plan !== 'pro');
   const expiry = subscriptionAccess && plan !== 'free'
     ? new Date(subscriptionAccess.expiresAt).toLocaleDateString('ru-RU')
     : null;
@@ -297,23 +296,28 @@ function SubscriptionSection({ onNavigate }: { onNavigate: (p: Page) => void }) 
           </div>
         </div>
         <Button onClick={() => onNavigate('subscription')}>Тарифы и оплата</Button>
+        {billingStatus === 'loading' && <p role="status" className="mt-3 text-xs text-white/50">Обновляем статус подписки…</p>}
+        {(billingStatus === 'unavailable' || billingStatus === 'auth_required') && <p className="mt-3 text-xs leading-relaxed text-amber-300">{billingError || 'Не удалось обновить оплату. Открой раздел тарифов, чтобы повторить запрос.'}</p>}
       </Card>
 
-      {pendingPayment && (
+      {paymentRequest && (
         <Card className="p-5 border-warning-500/30">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-warning-500/10 text-warning-400 flex items-center justify-center shrink-0">
               <Clock className="w-5 h-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-white">Сохранённая заявка</p>
+              <p className="text-sm font-medium text-white">{paymentRequest.status === 'approved' ? 'Оплата подтверждена' : paymentRequest.status === 'rejected' ? 'Оплата не подтверждена' : paymentRequest.receiptReceived ? 'Чек получен' : 'Прикрепи чек к заявке'}</p>
               <p className="text-xs text-white/50 mt-0.5">
-                {PLANS[pendingPayment.plan].name} — {formatCurrency(pendingPayment.amount)}. Если уже оплатил, отправь чек @{PAYMENT_CONTACT} и получи код активации.
+                {PLANS[paymentRequest.plan].name} — {formatCurrency(paymentRequest.amount)}.
               </p>
-              <p className="text-xs text-white/40 mt-2">Эта запись сохранена только в твоём кабинете. Она не подтверждает платёж и не отправляет чек.</p>
+              <p className="text-xs text-white/40 mt-2">{paymentRequest.status === 'approved'
+                ? 'Действующий тариф и срок доступа показаны выше.'
+                : paymentRequest.status === 'rejected' ? `Если деньги отправлены, напиши @${PAYMENT_CONTACT}. Повторно платить не нужно.`
+                  : paymentRequest.receiptReceived ? 'Ожидаем подтверждения Ержана. После него тариф включится автоматически.' : 'Открой заявку и отправь чек боту. Заявка сама по себе не подтверждает оплату.'}</p>
             </div>
           </div>
-          <Button variant="secondary" size="sm" className="mt-4" onClick={() => onNavigate('subscription')}>Продолжить оформление</Button>
+          <Button variant="secondary" size="sm" className="mt-4" onClick={() => onNavigate('subscription')}>Открыть заявку</Button>
         </Card>
       )}
     </div>

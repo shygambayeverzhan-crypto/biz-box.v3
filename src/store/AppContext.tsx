@@ -8,6 +8,8 @@ import { uid } from '@/lib/format';
 import { loadWorkspace, saveWorkspace, isWorkspaceState, type CloudStorage } from '@/lib/cloudWorkspace';
 import { getTelegram, isTelegramLaunch, telegramDisplayName } from '@/lib/telegram';
 import { verifyAccessCode, type SubscriptionAccess } from '@/lib/subscriptionAccess';
+import { useBilling, type BillingStatus, type ServerPaymentRequest } from '@/lib/billingApi';
+import type { PaidPlan } from '@/lib/billing';
 
 interface AuthState { mode: 'telegram' | 'demo' | null }
 interface ReferralStats { code: string; invitedCount: number; bonusEarned: number }
@@ -18,6 +20,11 @@ interface AppContextValue {
   referral: ReferralStats;
   subscriptionAccess: SubscriptionAccess | null;
   activateAccessCode: (code: string) => Promise<void>;
+  paymentRequest: ServerPaymentRequest | null;
+  billingStatus: BillingStatus;
+  billingError: string;
+  submitPaymentRequest: (plan: PaidPlan) => Promise<{ notificationDelivered: boolean }>;
+  refreshBilling: () => Promise<void>;
   bootStatus: 'loading' | 'ready' | 'error';
   bootError: string;
   syncStatus: SyncStatus;
@@ -108,6 +115,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const completingRef = useRef(false);
   const bootRun = useRef(0);
   const cacheKey = useRef<string | null>(null);
+  const billing = useBilling({
+    enabled: auth.mode === 'telegram' && bootStatus === 'ready' && !accessSuspended.current,
+    userId: currentTelegramUserId(),
+    epoch: bootRun.current,
+  });
+  const { clearBilling } = billing;
 
   const rememberAccess = useCallback((access: SubscriptionAccess | null) => {
     accessRef.current = access;
@@ -181,6 +194,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (savingRef.current) await savingRef.current.catch(() => {});
     const run = ++bootRun.current;
     accessSuspended.current = true;
+    clearBilling();
     clearAccess();
     telegramUserIdRef.current = null;
     setBootStatus('loading');
@@ -230,7 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBootError(errorMessage(error));
       setBootStatus('error');
     }
-  }, [replaceState, clearAccess, rememberAccess]);
+  }, [replaceState, clearAccess, rememberAccess, clearBilling]);
 
   useEffect(() => { void reloadWorkspace(); }, [reloadWorkspace]);
   // A retried save may commit an earlier activation after its original promise
@@ -259,15 +273,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (auth.mode !== 'telegram') return;
     const expire = () => {
-      const access = accessRef.current;
-      if (!access || (access.expiresAt > Date.now() && currentTelegramUserId() === telegramUserIdRef.current)) return;
       if (currentTelegramUserId() !== telegramUserIdRef.current) {
         accessSuspended.current = true;
+        clearBilling();
         clearAccess();
         setBootError('Telegram-аккаунт изменился. Откройте приложение снова.');
         setBootStatus('error');
         return;
       }
+      const access = accessRef.current;
+      if (!access || access.expiresAt > Date.now()) return;
       rememberAccess(null);
       setState(s => withPlan(s, 'free'));
     };
@@ -281,7 +296,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('focus', expire);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [auth.mode, clearAccess, rememberAccess, setState]);
+  }, [auth.mode, clearAccess, rememberAccess, setState, clearBilling]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (pendingRef.current || savingRef.current) { event.preventDefault(); event.returnValue = ''; }
@@ -293,16 +308,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const startDemo = useCallback(() => {
     if (getTelegram()) return; // Real Telegram sessions always use their cloud workspace.
     accessSuspended.current = true;
+    clearBilling();
     clearAccess();
     telegramUserIdRef.current = null;
     modeRef.current = 'demo';
     replaceState(createSeedState());
     setAuth({ mode: 'demo' });
     setSyncStatus('idle');
-  }, [replaceState, clearAccess]);
+  }, [replaceState, clearAccess, clearBilling]);
 
   const logout = useCallback(() => {
     accessSuspended.current = true;
+    clearBilling();
     clearAccess();
     if (modeRef.current === 'telegram') {
       void flush().then(() => getTelegram()?.close()).catch(() => {});
@@ -311,7 +328,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     modeRef.current = null;
     replaceState(emptyState());
     setAuth({ mode: null });
-  }, [flush, replaceState, clearAccess]);
+  }, [flush, replaceState, clearAccess, clearBilling]);
 
   const activateAccessCode = useCallback(async (code: string) => {
     const userId = currentTelegramUserId();
@@ -537,12 +554,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 
 
-  const effectiveAccess = auth.mode === 'telegram' && !accessSuspended.current && subscriptionAccess
-    && subscriptionAccess.expiresAt > Date.now() && currentTelegramUserId() === telegramUserIdRef.current
+  const hasCurrentSession = auth.mode === 'telegram' && !accessSuspended.current
+    && currentTelegramUserId() === telegramUserIdRef.current;
+  const serverAccess = hasCurrentSession && billing.serverSubscription && billing.serverSubscription.expiresAt > Date.now()
+    ? billing.serverSubscription : null;
+  const legacyAccess = hasCurrentSession && subscriptionAccess && subscriptionAccess.expiresAt > Date.now()
     ? subscriptionAccess : null;
+  const effectiveAccess = serverAccess || legacyAccess;
   const value: AppContextValue = {
     state: auth.mode === 'telegram' ? withPlan(state, effectiveAccess?.plan || 'free') : state,
     auth, referral, subscriptionAccess: effectiveAccess, activateAccessCode, bootStatus, bootError, syncStatus, syncError, legacyState,
+    paymentRequest: billing.paymentRequest, billingStatus: billing.billingStatus, billingError: billing.billingError,
+    submitPaymentRequest: billing.submitPaymentRequest, refreshBilling: billing.refreshBilling,
     startDemo, logout, reloadWorkspace, retrySave, importLegacy, dismissLegacy, exportWorkspace,
     saveOnboardingDraft, completeOnboarding, updateUser, updateBusiness,
     addTransaction, updateTransaction, deleteTransaction,

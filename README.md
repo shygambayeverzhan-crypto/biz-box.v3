@@ -53,6 +53,16 @@ Official APIs:
 
 ## Release and operational checks
 
+### AI assistant (Google Gemini)
+
+Set `GEMINI_API_KEY` in **Production** environment variables on the canonical Vercel project **biz-box-v3**, then redeploy that project. Create the key in Google AI Studio; never put it in chat, client code or a `VITE_` variable. `GOOGLE_API_KEY` is accepted as an alternative. `GEMINI_MODEL` optionally overrides the default `gemini-3.8-flash`. Old OpenAI keys are not used or forwarded to Google.
+
+Requests use Google's documented OpenAI-compatible endpoint directly, with low thinking effort, a 45-second total deadline and at most four model rounds. Tool-call thought signatures are retained server-side between rounds. Financial calculations remain deterministic and proposed writes require confirmation. The provider receives only the allowlisted business fields described in the assistant screen.
+
+After deployment, the owner-authenticated `setup` operation `diagnose_ai` checks a fixed greeting; `test_ai` verifies a synthetic profit calculation and a proposed task without writing records. Both require the existing setup secret. Mock tests do not establish real model availability. Invalid keys, access restrictions, quota exhaustion and billing failures are reported distinctly; Google controls API availability and billing.
+
+References: https://ai.google.dev/gemini-api/docs/openai and https://ai.google.dev/gemini-api/docs/api-key.
+
 Keep the Mini App/menu URL in BotFather on one stable production alias: `https://biz-box-v3.vercel.app`. Deploy-specific preview URLs should not be used as the permanent bot URL.
 
 Before release:

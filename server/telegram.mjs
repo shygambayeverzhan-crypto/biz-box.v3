@@ -107,6 +107,7 @@ export function verifyInitData(initData, botToken, now = Date.now()) {
     id: String(user.id),
     name: safeLine([user.first_name, user.last_name].filter(Boolean).join(' '), 64) || 'Пользователь',
     username: user.username || '',
+    startParam: fields.get('start_param') || '',
   };
 }
 

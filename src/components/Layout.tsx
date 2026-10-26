@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState, type ReactNode } from 'react';
-import { Bell, LogOut, User, Settings, CreditCard, ChevronDown, Menu, X, Wallet, FileText, Users, CheckSquare, UserCog, Calendar, Briefcase } from 'lucide-react';
+import { Bell, LogOut, User, Settings, CreditCard, ChevronDown, Menu, X, Wallet, FileText, Users, CheckSquare, UserCog, Calendar, Briefcase, Sparkles, Gift } from 'lucide-react';
 import type { Page, AppNotification } from '@/types';
 import { useApp } from '@/store/AppContext';
 import { Avatar } from '@/components/ui/Avatar';
@@ -40,6 +40,8 @@ export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
   const unread = notifications.filter(n => !n.read).length;
 
   const moreItems: { page: Page; label: string; icon: typeof Wallet }[] = [
+    { page: 'assistant', label: 'ИИ-помощник', icon: Sparkles },
+    { page: 'referrals', label: 'Приглашения и бонусы', icon: Gift },
     { page: 'documents', label: 'Документы', icon: FileText },
     { page: 'employees', label: 'Сотрудники', icon: UserCog },
     { page: 'calendar', label: 'Календарь', icon: Calendar },

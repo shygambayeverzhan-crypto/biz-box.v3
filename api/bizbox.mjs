@@ -1,5 +1,6 @@
 import { HttpError, verifyInitData, verifyWebhookSecret, botApi, formatRequestMessage, requestKeyboard } from '../server/telegram.mjs';
 import { billingStore, clientState } from '../server/billingStore.mjs';
+import { askAssistant, sanitizeContext } from '../server/assistant.mjs';
 
 const ADMIN_ID = '6575928505';
 const APP_URL = 'https://biz-box-v3.vercel.app';
@@ -108,6 +109,9 @@ async function handleMessage(msg) {
   const userId = String(msg.from.id);
   const text = typeof msg.text === 'string' ? msg.text.trim() : '';
   const command = text.split(/\s+/)[0].split('@')[0].toLowerCase();
+  if (command === '/start' && /^ref_[a-f0-9]{32}$/.test(text.split(/\s+/)[1] || '')) {
+    await billingStore('referral_register', { user_id: userId, code: text.split(/\s+/)[1].slice(4) });
+  }
   if (command === '/admin') {
     if (userId === ADMIN_ID) await pendingAdmin();
     else await message(userId, 'Эта команда доступна владельцу BizBox. Твой тариф — в приложении.', appKeyboard);
@@ -164,6 +168,9 @@ async function handleMessage(msg) {
 async function setup(body, request) {
   const bearer = request.headers.get('authorization')?.replace(/^Bearer /, '');
   if (!verifyWebhookSecret(bearer, process.env.BIZBOX_SETUP_SECRET)) throw new HttpError(403, 'forbidden', 'Доступ запрещён.');
+  if (body.operation === 'test_ai') {
+    return askAssistant({message:'Какая прибыль за октябрь 2026? Ответь одной фразой.',history:[],context:{today:'2026-10-26',transactions:[{type:'income',amount:50000,date:'2026-10-26',status:'completed',category:'Тест'},{type:'expense',amount:33500,date:'2026-10-26',status:'completed',category:'Тест'}],tasks:[],clients:[]}});
+  }
   const bot = await api('getMe', {});
   if (bot.username?.toLowerCase() !== 'biznowbox_bot') throw new HttpError(409, 'wrong_bot', 'Токен принадлежит другому боту. Нужен @Biznowbox_bot.');
   const hook = await api('getWebhookInfo', {});
@@ -182,14 +189,14 @@ async function setup(body, request) {
 }
 
 async function readBody(request) {
-  if (Number(request.headers.get('content-length')) > 32_768) throw new HttpError(413, 'too_large', 'Запрос слишком большой.');
+  if (Number(request.headers.get('content-length')) > 262_144) throw new HttpError(413, 'too_large', 'Запрос слишком большой.');
   const reader = request.body?.getReader();
   if (!reader) throw new HttpError(400, 'bad_request', 'Пустой запрос.');
   let size = 0; const chunks = [];
   while (true) {
     const { done, value } = await reader.read(); if (done) break;
     size += value.length;
-    if (size > 32_768) { await reader.cancel(); throw new HttpError(413, 'too_large', 'Запрос слишком большой.'); }
+    if (size > 262_144) { await reader.cancel(); throw new HttpError(413, 'too_large', 'Запрос слишком большой.'); }
     chunks.push(value);
   }
   try {
@@ -207,7 +214,7 @@ export default {
     const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
     if (origin && !ALLOWED_ORIGINS.has(origin)) return reply({ error: 'Этот адрес не разрешён.' }, 403);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
-    if (request.method === 'GET') return reply({ service: 'BizBox billing', version: '2.2-admin', configured: configured() });
+    if (request.method === 'GET') return reply({ service: 'BizBox', version: '2.4-assistant', configured: configured() });
     if (request.method !== 'POST') return reply({ error: 'Метод не поддерживается.' }, 405);
     try {
       if (!configured()) throw new HttpError(503, 'billing_unavailable', 'Подтверждение через бота ещё подключается. Попробуй позже.');
@@ -221,6 +228,19 @@ export default {
       }
       if (body.action === 'setup') return reply(await setup(body, request));
       const user = verifyInitData(body.initData, process.env.BIZBOX_BOT_TOKEN);
+      if (body.action === 'assistant') {
+        // Reject malformed requests before reserving quota or calling a model.
+        sanitizeContext(body.context);
+        if (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 4000 || !Array.isArray(body.history) || body.history.length > 12) throw new HttpError(400,'assistant_input','Проверь текст вопроса.');
+        const quota = await billingStore('assistant_reserve', { user_id:user.id });
+        return reply({...await askAssistant(body),remaining:quota.remaining});
+      }
+      if (['state','request','referral_state','wallet_redeem'].includes(body.action)) {
+        const code = /^ref_[a-f0-9]{32}$/.test(user.startParam) ? user.startParam.slice(4) : '';
+        await billingStore('referral_register', { user_id:user.id,code });
+      }
+      if (body.action === 'referral_state') return reply(await billingStore('referral_state',{user_id:user.id}));
+      if (body.action === 'wallet_redeem') return reply(await billingStore('wallet_redeem',{user_id:user.id,plan:body.plan,request_id:body.requestId}));
       if (body.action === 'state') return reply(clientState(await billingStore('get_state', { user_id: user.id })));
       if (body.action !== 'request' || !['business', 'pro'].includes(body.plan)) throw new HttpError(400, 'bad_request', 'Выбери тариф BUSINESS или PRO.');
       const { request: payment } = await billingStore('create_request', { user_id: user.id, name: user.name, username: user.username, plan: body.plan });

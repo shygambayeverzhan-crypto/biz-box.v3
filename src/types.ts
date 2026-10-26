@@ -8,7 +8,9 @@ export type Page =
   | 'calendar'
   | 'specialists'
   | 'subscription'
-  | 'settings';
+  | 'settings'
+  | 'assistant'
+  | 'referrals';
 
 export type TransactionType = 'income' | 'expense' | 'transfer';
 

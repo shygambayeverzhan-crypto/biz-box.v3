@@ -21,8 +21,13 @@ export async function billingStore(action, args) {
       rate_limit: 'Слишком много заявок. Попробуй позже.',
       no_pending_request: 'Нет заявки, ожидающей решения. Сначала нажми «Я оплатил» в тарифах.',
       request_not_found: 'Заявка не найдена.',
+      ai_rate_limit: 'Подожди несколько секунд перед следующим вопросом. Доступно до 30 вопросов в сутки.',
+      ai_daily_limit: 'Дневной лимит ИИ исчерпан. Попробуй завтра.',
+      insufficient_balance: 'На бонусном балансе недостаточно средств для этого тарифа.',
+      payment_pending: 'У тебя уже есть заявка на оплату. Дождись решения перед оплатой бонусами.',
+      active_pro: 'Тариф PRO ещё действует. Можно продлить PRO или дождаться его окончания.',
     };
-    if (code && Object.hasOwn(messages, code)) throw new HttpError(code === 'rate_limit' ? 429 : 400, code, messages[code]);
+    if (code && Object.hasOwn(messages, code)) throw new HttpError(code.includes('limit') ? 429 : 400, code, messages[code]);
     throw new HttpError(503, 'billing_unavailable', 'Не удалось обработать заявку. Попробуй ещё раз.');
   }
   return data;

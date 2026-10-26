@@ -50,6 +50,24 @@ test('unknown tools and malformed proposals are not executed',()=>{
   assert.ok(executeTool('propose_task',{title:'Bad',dueDate:'tomorrow',priority:'medium'},context,proposals).error);
   assert.equal(proposals.length,0);
 });
+test('overload falls back once within Google and discards old model signatures and proposals',async()=>{
+  let calls=0;
+  const result=await askAssistant({context,message:'Подготовь задачу на завтра',history:[]},{token:'test',fetcher:async(url,options)=>{
+    const body=JSON.parse(options.body); calls++;
+    if(calls===2) return Response.json({error:{status:'UNAVAILABLE'}},{status:503});
+    if(calls===3) {
+      assert.equal(body.model,'gemini-3.5-flash-lite');
+      assert.equal(body.messages.length,2);
+      assert.equal(JSON.stringify(body).includes('primary-signature'),false);
+    }
+    if(calls===1 || calls===3) return Response.json({choices:[{message:{tool_calls:[{id:'p'+calls,type:'function',function:{name:'propose_task',arguments:JSON.stringify({title:'Проверить рекламу',dueDate:'2026-10-27',priority:'medium'})},extra_content:{google:{thought_signature:calls===1?'primary-signature':'fallback-signature'}}}]}}]});
+    return Response.json({choices:[{message:{content:'Подтверди задачу ниже.'}}]});
+  }});
+  assert.equal(calls,4);assert.equal(result.proposals.length,1);assert.equal(result.model,'gemini-3.5-flash-lite');
+  let failures=0;
+  await assert.rejects(askAssistant({context,message:'Привет',history:[]},{token:'test',fetcher:async()=>{failures++;return Response.json({error:{status:'UNAVAILABLE'}},{status:503});}}),e=>e.code==='ai_unavailable');
+  assert.equal(failures,2);
+});
 test('AI provider access errors are honest and do not expose secrets or pretend success',async()=>{
   const error={code:503,status:'UNAVAILABLE',message:'Provider unavailable'};
   assert.deepEqual(assistantProviderError([{error}]),error);

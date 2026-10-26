@@ -115,6 +115,9 @@ export async function askAssistant(input, options = {}) {
       data=await response.json();
     } catch { throw new HttpError(504,'ai_timeout','ИИ не успел ответить. Попробуй ещё раз — записи не изменены.'); }
     if (!response.ok) {
+      const providerCode=data?.error?.code || data?.error?.type;
+      if(providerCode==='customer_verification_required') throw new HttpError(503,'ai_verification_required','Для включения ИИ владелец должен подтвердить платёжный метод в Vercel AI Gateway.');
+      if(providerCode==='insufficient_funds') throw new HttpError(503,'ai_insufficient_funds','Баланс сервиса ИИ исчерпан. Владелец должен пополнить Vercel AI Gateway.');
       const funding=[401,402,403].includes(response.status);
       throw new HttpError(funding?503:response.status===429?429:502,funding?'ai_access_required':'ai_unavailable',
         funding?'Сервис ИИ пока не активирован или его лимит исчерпан. Владелец должен проверить подключение и баланс ИИ.':'ИИ сейчас занят. Повтори вопрос чуть позже.');

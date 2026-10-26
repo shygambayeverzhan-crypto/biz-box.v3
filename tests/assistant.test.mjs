@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { askAssistant, assistantConnection, financialSummary, sanitizeContext, validateProposal, executeTool } from '../server/assistant.mjs';
+import { askAssistant, assistantConnection, assistantProviderError, financialSummary, sanitizeContext, validateProposal, executeTool } from '../server/assistant.mjs';
 import { verifyInitData } from '../server/telegram.mjs';
 import { assistantContext, applyProposal, isAssistantProposal } from '../src/lib/assistantActions.ts';
 import { createNewUserState } from '../src/lib/seed.ts';
@@ -51,6 +51,10 @@ test('unknown tools and malformed proposals are not executed',()=>{
   assert.equal(proposals.length,0);
 });
 test('AI provider access errors are honest and do not expose secrets or pretend success',async()=>{
+  const error={code:503,status:'UNAVAILABLE',message:'Provider unavailable'};
+  assert.deepEqual(assistantProviderError([{error}]),error);
+  assert.deepEqual(assistantProviderError({error}),error);
+  assert.deepEqual(assistantProviderError(error),error);
   for(const [status,expected] of [[401,'ai_invalid_key'],[402,'ai_insufficient_funds'],[403,'ai_access_required'],[404,'ai_model_unavailable'],[429,'ai_quota_required'],[400,'ai_request_rejected'],[503,'ai_unavailable']]) {
     await assert.rejects(askAssistant({context,message:'Привет',history:[]},{token:'SECRET',fetcher:async()=>Response.json({error:{code:status,message:'SECRET'}},{status})}),e=>e.code===expected&&!e.message.includes('SECRET'));
   }

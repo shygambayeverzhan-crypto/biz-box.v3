@@ -12,6 +12,10 @@ export function assistantConnection(env = process.env) {
 export function assistantGenerationOptions() {
   return { max_tokens: 4096, reasoning_effort: 'low' };
 }
+export function assistantProviderError(data) {
+  const first=Array.isArray(data)?data[0]:data;
+  return first?.error || (first && typeof first==='object' && typeof first.message==='string' ? first : {});
+}
 const record = x => x !== null && typeof x === 'object' && !Array.isArray(x);
 const text = (x, max = 240) => typeof x === 'string' ? x.trim().slice(0, max) : '';
 const amount = x => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1e12;
@@ -126,7 +130,8 @@ export async function askAssistant(input, options = {}) {
       data=await response.json();
     } catch { throw new HttpError(504,'ai_timeout','ИИ не успел ответить. Попробуй ещё раз — записи не изменены.'); }
     if (!response.ok) {
-      const reasons=Array.isArray(data?.error?.details)?data.error.details.map(d=>d?.reason):[];
+      const error=assistantProviderError(data);
+      const reasons=Array.isArray(error.details)?error.details.map(d=>d?.reason):[];
       if(response.status===401 || reasons.some(r=>['API_KEY_INVALID','API_KEY_EXPIRED'].includes(r))) throw new HttpError(503,'ai_invalid_key','Ключ Gemini недействителен. Владелец должен обновить его в настройках сервера.');
       if(response.status===403) throw new HttpError(503,'ai_access_required','Google не разрешил доступ к Gemini. Владелец должен проверить ключ и доступ к Gemini API в Google AI Studio.');
       if(response.status===402) throw new HttpError(503,'ai_insufficient_funds','Для Gemini требуется пополнить баланс API. Владелец должен проверить оплату в Google AI Studio.');

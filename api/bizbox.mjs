@@ -1,6 +1,6 @@
 import { HttpError, verifyInitData, verifyWebhookSecret, botApi, formatRequestMessage, requestKeyboard } from '../server/telegram.mjs';
 import { billingStore, clientState } from '../server/billingStore.mjs';
-import { askAssistant, sanitizeContext, assistantConnection, assistantGenerationOptions } from '../server/assistant.mjs';
+import { askAssistant, sanitizeContext, assistantConnection, assistantGenerationOptions, assistantProviderError } from '../server/assistant.mjs';
 
 const ADMIN_ID = '6575928505';
 const APP_URL = 'https://biz-box-v3.vercel.app';
@@ -168,6 +168,15 @@ async function handleMessage(msg) {
 async function setup(body, request) {
   const bearer = request.headers.get('authorization')?.replace(/^Bearer /, '');
   if (!verifyWebhookSecret(bearer, process.env.BIZBOX_SETUP_SECRET)) throw new HttpError(403, 'forbidden', 'Доступ запрещён.');
+  if (body.operation === 'list_ai_models') {
+    const {token:key}=assistantConnection();
+    if(!key) throw new HttpError(503,'ai_not_configured','Не задан ключ Gemini.');
+    const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',{
+      redirect:'error',signal:AbortSignal.timeout(15000),headers:{'x-goog-api-key':key},
+    });
+    const result=await response.json();
+    return {ok:response.ok,status:response.status,models:(result.models || []).filter(m=>m.supportedGenerationMethods?.includes('generateContent')).map(m=>m.name)};
+  }
   if (body.operation === 'diagnose_ai') {
     const {token:key,model,endpoint}=assistantConnection();
     if(!key) throw new HttpError(503,'ai_not_configured','Не задан GEMINI_API_KEY.');
@@ -177,9 +186,10 @@ async function setup(body, request) {
       body:JSON.stringify({model,messages:[{role:'user',content:'Say hello.'}],...assistantGenerationOptions()}),
     });
     const result=await response.json();
+    const providerError=assistantProviderError(result);
     // Admin-only probe uses a fixed synthetic prompt and never returns credentials.
     const clean=value=>String(value||'').replaceAll(key,'[redacted]').replace(/sk-[A-Za-z0-9_-]+/g,'[redacted]').replace(/(?:org|proj)-[A-Za-z0-9_-]+/g,'[account]').replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]+/g,'[email]').slice(0,1000);
-    return {ok:response.ok,status:response.status,provider:'google',model,code:clean(result.error?.code),type:clean(result.error?.status || result.error?.type),message:clean(result.error?.message),retryAfter:response.headers.get('retry-after')};
+    return {ok:response.ok,status:response.status,provider:'google',model,code:clean(providerError.code),type:clean(providerError.status || providerError.type),message:clean(providerError.message),retryAfter:response.headers.get('retry-after')};
   }
   if (body.operation === 'test_ai') {
     return askAssistant({message:'Какая прибыль за октябрь 2026? Также подготовь задачу Проверить рекламу на 27 октября 2026, средний приоритет. Ответь кратко.',history:[],context:{today:'2026-10-26',transactions:[{type:'income',amount:50000,date:'2026-10-26',status:'completed',category:'Тест'},{type:'expense',amount:33500,date:'2026-10-26',status:'completed',category:'Тест'}],tasks:[],clients:[]}});

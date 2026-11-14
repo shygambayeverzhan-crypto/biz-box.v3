@@ -119,7 +119,7 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
           type="button"
           aria-current={moreActive ? 'page' : undefined}
           onClick={() => onNavigate('settings')}
-          className={cn('dock-item flex flex-col items-center justify-center gap-1 px-1 py-2 transition-colors', moreActive ? 'dock-item-active' : 'hover:text-white hover:bg-white/5')}
+          className={cn('dock-item biz-glass-pulse flex flex-col items-center justify-center gap-1 px-1 py-2 transition-colors', moreActive ? 'dock-item-active' : 'hover:text-white hover:bg-white/5')}
         >
           <div aria-hidden="true" className="grid grid-cols-2 gap-[3px] w-[18px] h-[18px]">
             <div className="rounded-sm bg-current" />

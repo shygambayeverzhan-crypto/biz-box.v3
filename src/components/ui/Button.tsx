@@ -29,7 +29,7 @@ export function Button({ variant = 'primary', size = 'md', className, children, 
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center font-semibold transition-[background,box-shadow,transform,filter] duration-200 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none select-none whitespace-nowrap',
+        'biz-button-kinetic inline-flex items-center justify-center font-semibold disabled:opacity-40 disabled:pointer-events-none select-none whitespace-nowrap',
         variants[variant],
         sizes[size],
         className,

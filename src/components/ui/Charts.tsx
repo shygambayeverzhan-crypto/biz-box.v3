@@ -11,7 +11,7 @@ interface LineChartProps {
   className?: string;
 }
 
-export function LineChart({ data, height = 200, color = '#78AEFF', gradientId, formatValue, className }: LineChartProps) {
+export function LineChart({ data, height = 200, color = '#A89DFF', gradientId, formatValue, className }: LineChartProps) {
   const chartId = useId();
   const fillId = gradientId || `chart-${chartId.replace(/:/g, '')}`;
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -44,7 +44,7 @@ export function LineChart({ data, height = 200, color = '#78AEFF', gradientId, f
   const areaPath = `${linePath} L ${animatedPoints[animatedPoints.length - 1]?.x ?? 0} ${height - padY} L ${animatedPoints[0]?.x ?? 0} ${height - padY} Z`;
 
   return (
-    <div className={cn('relative w-full pb-7', className)}>
+    <div className={cn('biz-chart-motion relative w-full pb-7', className)}>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible" style={{ height }} preserveAspectRatio="none" role="img" aria-label={`Выручка по месяцам: ${data.map(d => `${d.label}: ${formatValue ? formatValue(d.value) : d.value}`).join(', ')}`}>
         <defs>
           <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
@@ -133,7 +133,7 @@ export function BarChart({ data, height = 200, formatValue, className }: BarChar
               className="w-full max-w-[2.5rem] rounded-t-lg transition-all duration-300 relative overflow-hidden"
               style={{
                 height: `${(d.value / max) * progress * 100}%`,
-                background: d.color || 'linear-gradient(180deg, #0066FF 0%, #003D99 100%)',
+                background: d.color || 'linear-gradient(180deg, #9A8DFF 0%, #6258EB 100%)',
                 minHeight: progress > 0 ? '4px' : '0',
               }}
             />
@@ -272,7 +272,7 @@ export function ComparisonChart({ data, height = 220, formatValue, className }: 
           <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
             <div className="flex items-end gap-1 w-full justify-center h-full">
               <div className="w-3 sm:w-4 rounded-t-md transition-all duration-500"
-                style={{ height: `${(d.income / max) * progress * 100}%`, background: 'linear-gradient(180deg, #0066FF, #003D99)', minHeight: progress > 0 ? '3px' : 0 }} title={`Доход: ${formatValue?.(d.income) ?? d.income}`} />
+                style={{ height: `${(d.income / max) * progress * 100}%`, background: 'linear-gradient(180deg, #9A8DFF, #6258EB)', minHeight: progress > 0 ? '3px' : 0 }} title={`Доход: ${formatValue?.(d.income) ?? d.income}`} />
               <div className="w-3 sm:w-4 rounded-t-md transition-all duration-500"
                 style={{ height: `${(d.expense / max) * progress * 100}%`, background: 'linear-gradient(180deg, #EF4444, #991B1B)', minHeight: progress > 0 ? '3px' : 0 }} title={`Расход: ${formatValue?.(d.expense) ?? d.expense}`} />
             </div>

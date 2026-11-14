@@ -25,3 +25,13 @@ A presentation-only refresh on top of the existing production logic.
 3. Exercise operations, subscription flow, onboarding and persistence — check the UI changes do not block saving.
 4. Test iOS Safari and Android Telegram blur fallback; check contrast of metric panels and form fields.
 5. Merge only after validating on a preview; live BotFather URL remains unchanged.
+
+## Motion — v2
+- Active navigation: spring-selection animation and active underline.
+- Page changes: 440ms slide/fade, reduced motion respected.
+- Dashboard: staggered sequential reveal for greeting, quick actions, balance, KPI, tasks and operations.
+- Balance card: drifting light sweep and orbiting violet glow; content and data remain interactive.
+- Buttons: press scaling and glossy hover feedback; mobile hit areas remain unchanged.
+- Charts: existing interpolated data animation with refreshed violet palette.
+- App shell: slow ambient glow orbs using compositor transforms.
+- Decorative motion disabled by `prefers-reduced-motion: reduce`.

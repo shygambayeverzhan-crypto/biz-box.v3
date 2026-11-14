@@ -209,12 +209,13 @@ export function AppLayout({ current, onNavigate, children }: AppLayoutProps) {
   }, [current]);
   return (
     <div className="app-canvas flex">
+      <div className="biz-ambient-layer" aria-hidden="true"><span className="biz-ambient-orb one" /><span className="biz-ambient-orb two" /><span className="biz-ambient-orb three" /></div>
       <Sidebar current={current} onNavigate={onNavigate} businessName={state.business?.name} />
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar onNavigate={onNavigate} businessName={state.business?.name} userName={state.user?.name} />
         <main className="app-content flex-1 px-4 pt-6 sm:px-6 sm:pt-7 max-w-7xl w-full mx-auto">
           <SyncBanner />
-          <div key={current} className="animate-fade-in">
+          <div key={current} className="biz-page-enter">
             {children}
           </div>
         </main>

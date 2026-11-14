@@ -127,7 +127,13 @@ input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.8); cur
   box-shadow:inset 0 1px 0 rgba(255,255,255,.26),0 6px 16px rgba(50,35,114,.15);
   backdrop-filter:blur(14px) saturate(160%); -webkit-backdrop-filter:blur(14px) saturate(160%);
 }
-.liquid-card, .liquid-panel, .glass, .glass-strong { position:relative; }
+/* Keep positioned UI overlays anchored: the mobile dock must never become a flex child. */
+.liquid-card { position:relative; }
+.liquid-panel:not(.absolute):not(.fixed):not(.sticky) { position:relative; }
+.glass:not(.app-topbar):not(.absolute):not(.fixed):not(.sticky) { position:relative; }
+.glass-strong:not(.liquid-dock):not(.absolute):not(.fixed):not(.sticky) { position:relative; }
+.app-topbar { position:sticky; }
+.liquid-dock { position:fixed; }
 .liquid-card::before, .liquid-panel::before, .glass::before, .glass-strong::before {
   content:""; pointer-events:none; position:absolute; inset:0; border-radius:inherit;
   background:linear-gradient(140deg,rgba(255,255,255,.16),transparent 38%,transparent 77%,rgba(180,170,255,.035));

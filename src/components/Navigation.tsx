@@ -106,7 +106,7 @@ export function BottomNav({ current, onNavigate }: BottomNavProps) {
               aria-current={active ? 'page' : undefined}
               onClick={() => onNavigate(item.page)}
               className={cn(
-                'dock-item flex flex-col items-center justify-center gap-1 px-1 py-2 transition-colors',
+                'dock-item biz-glass-pulse flex flex-col items-center justify-center gap-1 px-1 py-2 transition-colors',
                 active ? 'dock-item-active' : 'hover:text-white hover:bg-white/5',
               )}
             >

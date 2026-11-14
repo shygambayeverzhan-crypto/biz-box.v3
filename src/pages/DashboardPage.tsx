@@ -93,7 +93,7 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
   };
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="space-y-5 sm:space-y-6 biz-dashboard">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -109,7 +109,7 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
       <div className="grid grid-cols-2 gap-3"><Button variant="secondary" onClick={()=>onNavigate('assistant')}><Sparkles size={16}/>Спросить ИИ</Button><Button variant="secondary" onClick={()=>onNavigate('referrals')}><Gift size={16}/>Бонусы за друзей</Button></div>
       <HomeScreenCard compact />
       {/* Revenue card */}
-      <Card className="p-5 sm:p-7 relative overflow-hidden">
+      <Card className="biz-balance-card p-5 sm:p-7 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-accent-500/10 blur-3xl pointer-events-none" />
         <div className="relative flex flex-col lg:flex-row gap-6">
           <div className="lg:w-1/3">

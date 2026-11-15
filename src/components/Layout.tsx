@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState, type ReactNode } from 'react';
-import { Bell, LogOut, User, Settings, CreditCard, ChevronDown, Menu, X, Wallet, FileText, Users, CheckSquare, UserCog, Calendar, Briefcase, Sparkles, Gift } from 'lucide-react';
+import { Bell, LogOut, User, Settings, CreditCard, ChevronDown, Menu, X, Wallet, FileText, Users, CheckSquare, UserCog, Calendar, Briefcase, Sparkles, Gift, Sun, Moon } from 'lucide-react';
 import type { Page, AppNotification } from '@/types';
 import { useApp } from '@/store/AppContext';
 import { Avatar } from '@/components/ui/Avatar';
@@ -10,6 +10,8 @@ import { SyncBanner } from '@/components/WorkspaceStatus';
 import { relativeDate } from '@/lib/format';
 import { getVisibleNotifications } from '@/lib/notificationPreferences';
 import { cn } from '@/lib/cn';
+import { Logo } from '@/components/Logo';
+import { getSavedTheme, setBizTheme } from '@/lib/uiTheme';
 
 interface TopbarProps {
   onNavigate: (p: Page) => void;
@@ -26,9 +28,9 @@ const notifIcons: Record<AppNotification['type'], typeof Bell> = {
 };
 
 const notifColors: Record<AppNotification['type'], string> = {
-  payment: 'text-success-400 bg-success-500/10',
+  payment: 'text-accent-400 bg-accent-500/10',
   task: 'text-accent-400 bg-accent-500/10',
-  client: 'text-warning-400 bg-warning-500/10',
+  client: 'text-accent-400 bg-accent-500/10',
   document: 'text-accent-300 bg-accent-500/10',
   system: 'text-white/50 bg-white/5',
 };
@@ -36,6 +38,8 @@ const notifColors: Record<AppNotification['type'], string> = {
 export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
   const { state, logout, markNotificationRead } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [theme, setTheme] = useState(getSavedTheme);
+  const toggleTheme = () => { const next=theme === 'dark' ? 'light' : 'dark'; setTheme(next); setBizTheme(next); };
   const notifications = getVisibleNotifications(state.notifications, state.user?.notificationPreferences);
   const unread = notifications.filter(n => !n.read).length;
 
@@ -52,25 +56,29 @@ export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
 
   return (
     <>
-      <header className="app-topbar sticky z-30 glass mx-3 mt-3 sm:mx-6 rounded-[24px]">
+      <header className="app-topbar sticky z-30 glass mx-3 mt-3 sm:mx-6 rounded-[20px]">
         <div className="flex items-center justify-between gap-3 px-3 sm:px-4 h-16">
           <div className="flex items-center gap-3 min-w-0">
             <button type="button" aria-label="Открыть меню" aria-expanded={mobileMenuOpen} className="liquid-control lg:hidden w-10 h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white" onClick={() => setMobileMenuOpen(true)}>
               <Menu className="w-5 h-5" />
             </button>
+            <Logo size="sm" showText={false} className="hidden min-[360px]:flex" />
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold tracking-[0.16em] text-white/55">BIZBOX</p>
+              <p className="text-[11px] font-bold tracking-[0.06em] text-accent-300">BizBox</p>
               <p className="text-sm font-medium text-white truncate max-w-[36vw] sm:max-w-sm">{businessName || 'Мой бизнес'}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <button type="button" aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'} title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'} onClick={toggleTheme} className="liquid-control w-10 h-10 rounded-full flex items-center justify-center text-accent-300 transition-transform active:scale-95">
+              {theme === 'dark' ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
+            </button>
             <Dropdown
               trigger={
                 <button type="button" aria-label={unread > 0 ? `Уведомления: ${unread} непрочитанных` : 'Уведомления'} className="relative w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition-colors">
                   <Bell className="w-[18px] h-[18px]" />
                   {unread > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-danger-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    <span className="biz-on-accent absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-accent-600 text-white text-[9px] font-bold flex items-center justify-center">
                       {unread > 9 ? '9+' : unread}
                     </span>
                   )}
@@ -154,8 +162,7 @@ export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
           <div role="dialog" aria-modal="true" aria-label="Меню разделов" className="absolute left-3 top-3 bottom-3 w-[min(19rem,calc(100vw-1.5rem))] liquid-panel rounded-[28px] p-5 animate-fade-in flex flex-col">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center font-bold text-white text-sm">B</div>
-                <span className="font-bold text-white">BIZBOX</span>
+                <Logo size="sm" />
               </div>
               <button type="button" aria-label="Закрыть меню" onClick={() => setMobileMenuOpen(false)} className="liquid-control rounded-full w-10 h-10 flex items-center justify-center text-white/70 hover:text-white">
                 <X className="w-5 h-5" />
@@ -207,7 +214,7 @@ export function AppLayout({ current, onNavigate, children }: AppLayoutProps) {
         <Topbar onNavigate={onNavigate} businessName={state.business?.name} userName={state.user?.name} />
         <main className="app-content flex-1 px-4 pt-6 sm:px-6 sm:pt-7 max-w-7xl w-full mx-auto">
           <SyncBanner />
-          <div key={current} className="animate-fade-in">
+          <div key={current} className="biz-page-enter">
             {children}
           </div>
         </main>

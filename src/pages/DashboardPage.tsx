@@ -10,7 +10,6 @@ import { greeting, formatCurrency, relativeDate } from '@/lib/format';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Avatar } from '@/components/ui/Avatar';
 import { AnimatedNumber, LineChart } from '@/components/ui';
 import { NewOperationModal, KpiCard } from '@/components/NewOperationModal';
 import { cn } from '@/lib/cn';
@@ -93,9 +92,9 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
   };
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="space-y-5 sm:space-y-6 biz-dashboard">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="biz-reveal biz-delay-1 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <p className="text-[11px] uppercase tracking-[0.18em] text-white/50 mb-2">{now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' })}</p>
           <h1 className="text-[27px] sm:text-3xl font-semibold text-white tracking-tight leading-tight">{greeting()}, {userName}</h1>
@@ -106,22 +105,21 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3"><Button variant="secondary" onClick={()=>onNavigate('assistant')}><Sparkles size={16}/>Спросить ИИ</Button><Button variant="secondary" onClick={()=>onNavigate('referrals')}><Gift size={16}/>Бонусы за друзей</Button></div>
+      <div className="biz-reveal biz-delay-2 grid grid-cols-2 gap-3"><Button variant="secondary" onClick={()=>onNavigate('assistant')}><Sparkles size={16}/>Спросить ИИ</Button><Button variant="secondary" onClick={()=>onNavigate('referrals')}><Gift size={16}/>Бонусы за друзей</Button></div>
       <HomeScreenCard compact />
       {/* Revenue card */}
-      <Card className="p-5 sm:p-7 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-accent-500/10 blur-3xl pointer-events-none" />
+      <Card className="biz-balance-card biz-reveal biz-delay-3 p-5 sm:p-7 relative overflow-hidden">
         <div className="relative flex flex-col lg:flex-row gap-6">
           <div className="lg:w-1/3">
             <div className="flex items-center justify-between gap-3"><p className="text-sm text-white/65">Выручка за месяц</p><span className="text-[10px] uppercase tracking-widest text-white/50">{now.toLocaleDateString('ru-RU', { month: 'long' })}</span></div>
             <div className="flex items-baseline gap-2 mt-1">
-              <AnimatedNumber value={income} format={formatCurrency} className="text-[38px] sm:text-5xl font-semibold tracking-tight text-white tabular-nums" />
+              <AnimatedNumber value={income} duration={1450} format={formatCurrency} className="text-[38px] sm:text-5xl font-semibold tracking-tight text-white tabular-nums" />
             </div>
             <div className="flex items-center gap-1.5 mt-3">
               {revenueChange === null ? <Minus className="w-4 h-4 text-white/50" /> : revenueChange < 0
                 ? <TrendingDown className="w-4 h-4 text-danger-400" />
-                : <TrendingUp className="w-4 h-4 text-success-400" />}
-              <span className={cn('text-xs font-medium', revenueChange === null ? 'text-white/55' : revenueChange < 0 ? 'text-danger-400' : 'text-success-400')}>
+                : <TrendingUp className="w-4 h-4 text-accent-400" />}
+              <span className={cn('text-xs font-medium', revenueChange === null ? 'text-white/55' : revenueChange < 0 ? 'text-danger-400' : 'text-accent-400')}>
                 {revenueTrendLabel}
               </span>
             </div>
@@ -132,7 +130,7 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
               </div>
               <div className="liquid-inset rounded-2xl p-3.5 border border-border">
                 <p className="text-2xs text-white/40">Прибыль</p>
-                <p className={cn('text-base font-semibold mt-0.5 tabular-nums', profit < 0 ? 'text-danger-400' : profit > 0 ? 'text-success-400' : 'text-white')}>{formatCurrency(profit)}</p>
+                <p className={cn('text-base font-semibold mt-0.5 tabular-nums', profit < 0 ? 'text-danger-400' : 'text-white')}>{formatCurrency(profit)}</p>
               </div>
             </div>
           </div>
@@ -145,15 +143,15 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
       </Card>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-        <KpiCard label="Расходы" value={expenses} format={formatCurrency} icon={<TrendingDown className="w-[18px] h-[18px]" />} accent="text-danger-400 bg-danger-500/10" onClick={() => onNavigate('finance')} />
-        <KpiCard label="Прибыль" value={profit} format={formatCurrency} icon={<Wallet className="w-[18px] h-[18px]" />} accent={profit < 0 ? 'text-danger-400 bg-danger-500/10' : 'text-success-400 bg-success-500/10'} onClick={() => onNavigate('finance')} />
+      <div className="biz-reveal biz-delay-4 grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        <KpiCard label="Расходы" value={expenses} format={formatCurrency} icon={<TrendingDown className="w-[18px] h-[18px]" />} accent="text-white/60 bg-bg-raised" onClick={() => onNavigate('finance')} />
+        <KpiCard label="Прибыль" value={profit} format={formatCurrency} icon={<Wallet className="w-[18px] h-[18px]" />} accent={profit < 0 ? 'text-danger-400 bg-danger-500/10' : 'text-accent-400 bg-accent-500/10'} onClick={() => onNavigate('finance')} />
         <KpiCard label="Клиенты" value={state.clients.length} format={n => String(Math.round(n))} icon={<Users className="w-[18px] h-[18px]" />} accent="text-accent-400 bg-accent-500/10" onClick={() => onNavigate('clients')} />
-        <KpiCard label="Задачи" value={state.tasks.filter(t => !t.completed).length} format={n => String(Math.round(n))} icon={<CheckSquare className="w-[18px] h-[18px]" />} accent="text-warning-400 bg-warning-500/10" onClick={() => onNavigate('tasks')} />
-        <KpiCard label="Сотрудники" value={state.employees.length} format={n => String(Math.round(n))} icon={<Users className="w-[18px] h-[18px]" />} accent="text-accent-300 bg-accent-500/10" onClick={() => onNavigate('employees')} />
+        <KpiCard label="Задачи" value={state.tasks.filter(t => !t.completed).length} format={n => String(Math.round(n))} icon={<CheckSquare className="w-[18px] h-[18px]" />} accent="text-accent-400 bg-accent-500/10" onClick={() => onNavigate('tasks')} />
+        <KpiCard label="Сотрудники" value={state.employees.length} format={n => String(Math.round(n))} icon={<Users className="w-[18px] h-[18px]" />} accent="text-white/60 bg-bg-raised" onClick={() => onNavigate('employees')} />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="biz-reveal biz-delay-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Today tasks */}
         <Card className="lg:col-span-2 p-5 sm:p-6">
           <div className="flex items-center justify-between mb-4">
@@ -221,7 +219,7 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
       </div>
 
       {/* Recent activity */}
-      <Card className="p-5 sm:p-6">
+      <Card className="biz-reveal biz-delay-6 p-5 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-white">Последние операции</h2>
           <button onClick={() => onNavigate('finance')} className="text-xs text-accent-400 hover:text-accent-300 flex items-center gap-1">
@@ -232,14 +230,14 @@ export function DashboardPage({ onNavigate }: DashboardProps) {
           {state.transactions.length === 0 && <p className="text-sm text-white/50 py-6 text-center">Здесь появятся ваши доходы и расходы.</p>}
           {state.transactions.slice(0, 5).map(t => (
             <div key={t.id} className="flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg hover:bg-bg-hover transition-colors">
-              <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', t.type === 'income' ? 'bg-success-500/10 text-success-400' : t.type === 'expense' ? 'bg-danger-500/10 text-danger-400' : 'bg-accent-500/10 text-accent-400')}>
+              <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', t.type === 'expense' ? 'bg-bg-raised text-white/60' : 'bg-accent-500/10 text-accent-400')}>
                 {t.type === 'income' ? <TrendingUp className="w-4 h-4" /> : t.type === 'expense' ? <TrendingDown className="w-4 h-4" /> : <Wallet className="w-4 h-4" />}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">{t.description}</p>
                 <p className="text-2xs text-white/40">{t.category} · {relativeDate(t.date)}</p>
               </div>
-              <span className={cn('text-sm font-semibold tabular-nums shrink-0', t.type === 'income' ? 'text-success-400' : t.type === 'expense' ? 'text-white' : 'text-accent-400')}>
+              <span className={cn('text-sm font-semibold tabular-nums shrink-0', t.type === 'expense' ? 'text-white' : 'text-accent-400')}>
                 {t.type === 'income' ? '+' : t.type === 'expense' ? '−' : ''}{formatCurrency(t.amount)}
               </span>
             </div>

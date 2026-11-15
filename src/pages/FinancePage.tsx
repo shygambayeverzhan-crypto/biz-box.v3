@@ -25,7 +25,7 @@ const statusConfig: Record<Transaction['status'], { label: string; tone: 'succes
   failed: { label: 'Ошибка', tone: 'danger' },
 };
 
-const DONUT_COLORS = ['#0066FF', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#EC4899', '#64748B'];
+const DONUT_COLORS = Array.from({ length: 8 }, (_, index) => `var(--chart-category-${index + 1})`);
 
 export function FinancePage() {
   const { state, addTransaction, updateTransaction, deleteTransaction } = useApp();
@@ -121,8 +121,8 @@ export function FinancePage() {
             <p className="text-xs text-white/40 mb-5">Сравнение за последние 5 месяцев</p>
             <ComparisonChart data={monthlyData} height={220} formatValue={formatCurrency} />
             <div className="flex items-center justify-center gap-6 mt-4">
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-accent-500" /><span className="text-xs text-white/60">Доходы</span></div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-danger-500" /><span className="text-xs text-white/60">Расходы</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ background: 'var(--chart-accent)' }} /><span className="text-xs text-white/60">Доходы</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ background: 'var(--chart-secondary)' }} /><span className="text-xs text-white/60">Расходы</span></div>
             </div>
           </Card>
           <Card className="p-5 sm:p-6">

@@ -11,7 +11,7 @@ interface LineChartProps {
   className?: string;
 }
 
-export function LineChart({ data, height = 200, color = '#A89DFF', gradientId, formatValue, className }: LineChartProps) {
+export function LineChart({ data, height = 200, color = 'var(--chart-accent)', gradientId, formatValue, className }: LineChartProps) {
   const chartId = useId();
   const fillId = gradientId || `chart-${chartId.replace(/:/g, '')}`;
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -48,12 +48,12 @@ export function LineChart({ data, height = 200, color = '#A89DFF', gradientId, f
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible" style={{ height }} preserveAspectRatio="none" role="img" aria-label={`Выручка по месяцам: ${data.map(d => `${d.label}: ${formatValue ? formatValue(d.value) : d.value}`).join(', ')}`}>
         <defs>
           <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.16" />
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
         {[0.25, 0.5, 0.75].map(f => (
-          <line key={f} x1={padX} x2={width - padX} y1={padY + f * (height - padY * 2)} y2={padY + f * (height - padY * 2)} stroke="#1E2A44" strokeWidth="1" strokeDasharray="4 4" opacity={0.5} />
+          <line key={f} x1={padX} x2={width - padX} y1={padY + f * (height - padY * 2)} y2={padY + f * (height - padY * 2)} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="4 4" />
         ))}
         <path d={areaPath} fill={`url(#${fillId})`} />
         <path d={linePath} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -64,7 +64,7 @@ export function LineChart({ data, height = 200, color = '#A89DFF', gradientId, f
             {hoverIdx === i && (
               <>
                 <line x1={p.x} x2={p.x} y1={padY} y2={height - padY} stroke={color} strokeWidth="1" opacity={0.4} />
-                <circle cx={p.x} cy={p.y} r="5" fill={color} stroke="#070A12" strokeWidth="2" />
+                <circle cx={p.x} cy={p.y} r="5" fill={color} stroke="var(--chart-surface)" strokeWidth="2" />
               </>
             )}
             <circle cx={p.x} cy={p.y} r="2.5" fill={color} opacity={progress === 1 ? 0.8 : 0} />
@@ -73,7 +73,7 @@ export function LineChart({ data, height = 200, color = '#A89DFF', gradientId, f
       </svg>
       {activePoint && progress === 1 && (
         <div
-          className="absolute pointer-events-none glass-strong border border-border-strong rounded-lg px-3 py-2 text-xs whitespace-nowrap z-10 -translate-x-1/2"
+          className="absolute pointer-events-none bg-bg-raised border border-border-strong rounded-lg px-3 py-2 text-xs whitespace-nowrap shadow-lg z-10 -translate-x-1/2"
           style={{ left: `${Math.max(18, Math.min(82, activePoint.x / width * 100))}%`, top: 4 }}
         >
           <div className="text-white/60">{activePoint.label}</div>
@@ -115,7 +115,6 @@ export function BarChart({ data, height = 200, formatValue, className }: BarChar
   }, [data]);
 
   const max = Math.max(...data.map(d => d.value), 1);
-  const barWidth = 100 / data.length;
 
   return (
     <div className={cn('w-full', className)}>
@@ -124,7 +123,7 @@ export function BarChart({ data, height = 200, formatValue, className }: BarChar
           <div key={i} className="flex-1 flex flex-col items-center justify-end h-full relative group"
             onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}>
             {hoverIdx === i && (
-              <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full glass-strong border border-border-strong rounded-lg px-2.5 py-1.5 text-2xs whitespace-nowrap z-10">
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full bg-bg-raised border border-border-strong rounded-lg px-2.5 py-1.5 text-2xs whitespace-nowrap shadow-lg z-10">
                 <div className="text-white font-semibold">{formatValue ? formatValue(d.value) : d.value}</div>
                 <div className="text-white/40">{d.label}</div>
               </div>
@@ -133,7 +132,7 @@ export function BarChart({ data, height = 200, formatValue, className }: BarChar
               className="w-full max-w-[2.5rem] rounded-t-lg transition-all duration-300 relative overflow-hidden"
               style={{
                 height: `${(d.value / max) * progress * 100}%`,
-                background: d.color || 'linear-gradient(180deg, #9A8DFF 0%, #6258EB 100%)',
+                background: d.color || 'var(--chart-accent)',
                 minHeight: progress > 0 ? '4px' : '0',
               }}
             />
@@ -185,7 +184,7 @@ export function DonutChart({ data, size = 180, thickness = 28, className, center
     <div className={cn('flex flex-col sm:flex-row items-center gap-6', className)}>
       <div className="relative shrink-0" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#10182B" strokeWidth={thickness} />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--chart-grid)" strokeWidth={thickness} />
           {data.map((d, i) => {
             const fraction = (d.value / total) * progress;
             const dash = fraction * circumference;
@@ -272,9 +271,9 @@ export function ComparisonChart({ data, height = 220, formatValue, className }: 
           <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
             <div className="flex items-end gap-1 w-full justify-center h-full">
               <div className="w-3 sm:w-4 rounded-t-md transition-all duration-500"
-                style={{ height: `${(d.income / max) * progress * 100}%`, background: 'linear-gradient(180deg, #9A8DFF, #6258EB)', minHeight: progress > 0 ? '3px' : 0 }} title={`Доход: ${formatValue?.(d.income) ?? d.income}`} />
+                style={{ height: `${(d.income / max) * progress * 100}%`, background: 'var(--chart-accent)', minHeight: progress > 0 ? '3px' : 0 }} title={`Доход: ${formatValue?.(d.income) ?? d.income}`} />
               <div className="w-3 sm:w-4 rounded-t-md transition-all duration-500"
-                style={{ height: `${(d.expense / max) * progress * 100}%`, background: 'linear-gradient(180deg, #EF4444, #991B1B)', minHeight: progress > 0 ? '3px' : 0 }} title={`Расход: ${formatValue?.(d.expense) ?? d.expense}`} />
+                style={{ height: `${(d.expense / max) * progress * 100}%`, background: 'var(--chart-secondary)', minHeight: progress > 0 ? '3px' : 0 }} title={`Расход: ${formatValue?.(d.expense) ?? d.expense}`} />
             </div>
           </div>
         ))}

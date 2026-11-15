@@ -25,7 +25,7 @@ const navItems: { page: Page; label: string; icon: typeof LayoutDashboard }[] = 
 
 export function Sidebar({ current, onNavigate, businessName }: SidebarProps) {
   return (
-    <aside className="hidden lg:flex flex-col w-60 shrink-0 liquid-panel rounded-[28px] h-[calc(100dvh-2rem)] sticky top-4 m-4 mr-0">
+    <aside className="hidden lg:flex flex-col w-60 shrink-0 liquid-panel rounded-[20px] h-[calc(100dvh-2rem)] sticky top-4 m-4 mr-0">
       <div className="px-6 py-6 border-b border-white/10">
         <Logo />
       </div>
@@ -40,8 +40,8 @@ export function Sidebar({ current, onNavigate, businessName }: SidebarProps) {
               aria-current={active ? 'page' : undefined}
               onClick={() => onNavigate(item.page)}
               className={cn(
-                'w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-sm font-medium transition-colors duration-200 relative group',
-                active ? 'liquid-control text-white' : 'text-white/65 hover:text-white hover:bg-white/5',
+                'w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-medium transition-colors duration-200 relative group',
+                active ? 'biz-nav-active' : 'text-white/65 hover:text-white hover:bg-white/5',
               )}
             >
               <Icon className={cn('w-[18px] h-[18px] shrink-0', active && 'text-accent-400')} />
@@ -54,8 +54,8 @@ export function Sidebar({ current, onNavigate, businessName }: SidebarProps) {
           onClick={() => onNavigate('settings')}
           aria-current={current === 'settings' ? 'page' : undefined}
           className={cn(
-            'w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-sm font-medium transition-colors duration-200',
-            current === 'settings' ? 'liquid-control text-white' : 'text-white/65 hover:text-white hover:bg-white/5',
+            'w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-medium transition-colors duration-200',
+            current === 'settings' ? 'biz-nav-active' : 'text-white/65 hover:text-white hover:bg-white/5',
           )}
         >
           <Settings className="w-[18px] h-[18px] shrink-0" />
@@ -65,7 +65,7 @@ export function Sidebar({ current, onNavigate, businessName }: SidebarProps) {
       {businessName && (
         <div className="p-5 border-t border-white/10">
           <div className="flex items-center gap-2.5 px-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-500/30 to-accent-700/20 border border-accent-500/30 flex items-center justify-center text-xs font-bold text-accent-300">
+            <div className="w-8 h-8 rounded-lg bg-accent-500/10 border border-accent-500/30 flex items-center justify-center text-xs font-bold text-accent-300">
               {businessName.slice(0, 1)}
             </div>
             <div className="min-w-0">

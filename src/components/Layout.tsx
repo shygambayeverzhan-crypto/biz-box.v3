@@ -28,9 +28,9 @@ const notifIcons: Record<AppNotification['type'], typeof Bell> = {
 };
 
 const notifColors: Record<AppNotification['type'], string> = {
-  payment: 'text-success-400 bg-success-500/10',
+  payment: 'text-accent-400 bg-accent-500/10',
   task: 'text-accent-400 bg-accent-500/10',
-  client: 'text-warning-400 bg-warning-500/10',
+  client: 'text-accent-400 bg-accent-500/10',
   document: 'text-accent-300 bg-accent-500/10',
   system: 'text-white/50 bg-white/5',
 };
@@ -56,7 +56,7 @@ export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
 
   return (
     <>
-      <header className="app-topbar sticky z-30 glass mx-3 mt-3 sm:mx-6 rounded-[26px]">
+      <header className="app-topbar sticky z-30 glass mx-3 mt-3 sm:mx-6 rounded-[20px]">
         <div className="flex items-center justify-between gap-3 px-3 sm:px-4 h-16">
           <div className="flex items-center gap-3 min-w-0">
             <button type="button" aria-label="Открыть меню" aria-expanded={mobileMenuOpen} className="liquid-control lg:hidden w-10 h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white" onClick={() => setMobileMenuOpen(true)}>
@@ -78,7 +78,7 @@ export function Topbar({ onNavigate, businessName, userName }: TopbarProps) {
                 <button type="button" aria-label={unread > 0 ? `Уведомления: ${unread} непрочитанных` : 'Уведомления'} className="relative w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition-colors">
                   <Bell className="w-[18px] h-[18px]" />
                   {unread > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-danger-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    <span className="biz-on-accent absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-accent-600 text-white text-[9px] font-bold flex items-center justify-center">
                       {unread > 9 ? '9+' : unread}
                     </span>
                   )}
@@ -209,7 +209,6 @@ export function AppLayout({ current, onNavigate, children }: AppLayoutProps) {
   }, [current]);
   return (
     <div className="app-canvas flex">
-      <div className="biz-ambient-layer" aria-hidden="true"><span className="biz-ambient-orb one" /><span className="biz-ambient-orb two" /><span className="biz-ambient-orb three" /></div>
       <Sidebar current={current} onNavigate={onNavigate} businessName={state.business?.name} />
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar onNavigate={onNavigate} businessName={state.business?.name} userName={state.user?.name} />
